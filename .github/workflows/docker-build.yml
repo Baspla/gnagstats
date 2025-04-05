@@ -35,6 +35,6 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/newsletter:latest
-            ghcr.io/${{ github.repository_owner }}/newsletter:${{ github.sha }}
+            ghcr.io/baspla/newsletter:latest
+            ghcr.io/baspla/newsletter:${{ github.sha }}
           platforms: linux/amd64,linux/arm64
