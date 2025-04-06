@@ -41,8 +41,6 @@ def setup_logging():
 
 async def core_loop(collector,newsletter_creator):
     logging.info("Starting core loop...")
-    await asyncio.sleep(10)
-    newsletter_creator.create_weekly_newsletter()
     await asyncio.sleep(DATA_COLLECTION_INTERVAL * 60)
     last_newsletter_day = None
     while True:
