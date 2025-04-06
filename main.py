@@ -47,7 +47,7 @@ async def core_loop(collector,newsletter_creator):
         start_time = time.time()  # Record the start time
         now = time.localtime()
         day_of_year = now.tm_yday
-        if now.tm_wday == 0 and now.tm_hour == 9 and now.tm_min >= 0 and now.tm_min <= DATA_COLLECTION_INTERVAL*2 and last_newsletter_day != day_of_year:
+        if now.tm_wday == 0 and now.tm_hour == 9 and 0 <= now.tm_min <= DATA_COLLECTION_INTERVAL * 2 and last_newsletter_day != day_of_year:
             logging.info("It's time to publish the newsletter!")
             newsletter_creator.create_weekly_newsletter()
             last_newsletter_day = day_of_year
