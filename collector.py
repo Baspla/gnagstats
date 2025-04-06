@@ -1,7 +1,8 @@
 import asyncio
 import logging
+import time
 
-from config import DATA_COLLECTION_INTERVAL, STEAM_API_KEY
+from config import DATA_COLLECTION_INTERVAL
 from db import Database
 from discord_bot import DiscordClient
 from steam_web_api import Steam
@@ -9,24 +10,17 @@ from steam_web_api import Steam
 
 class DataCollector:
 
-    def __init__(self, data, discord_client: DiscordClient, database: Database):
+    def __init__(self, data, discord_client: DiscordClient, database: Database, steam:Steam):
         self.data = data
         self.discord_client = discord_client
         self.db = database
-        self.steam = Steam(STEAM_API_KEY)
-
-    async def collect_data(self):
-        while True:
-            await asyncio.sleep(DATA_COLLECTION_INTERVAL * 60)
-            await self.collect_discord_data()
-            await self.collect_steam_data()
-        pass
+        self.steam = steam
 
     async def collect_discord_data(self):
         if not self.discord_client.is_ready():
             logging.warning("Discord client is not ready.")
             return
-        logging.info("Collecting Discord data...")
+        logging.debug("Collecting Discord data...")
         for guild in self.discord_client.guilds:
             logging.debug(f"Guild: {guild.name} (ID: {guild.id})")
             if str(guild.id) in self.data["guild_ids"]:
@@ -50,7 +44,7 @@ class DataCollector:
         pass
 
     async def collect_steam_data(self):
-        logging.info("Collecting Steam data...")
+        logging.debug("Collecting Steam data...")
         for user in self.data["user_steam_ids"]:
             logging.debug(f"Collecting data for Steam user {user}")
             # Maybe personaname änderungen tracken?

@@ -2,6 +2,7 @@ import logging
 import os
 DB_PATH : str                   = os.getenv("DB_PATH","collected_data.db")
 DISCORD_API_TOKEN : str         = os.getenv("DISCORD_API_TOKEN", "")
+DISCORD_WEBHOOK_URL : str         = os.getenv("DISCORD_WEBHOOK_URL", "")
 STEAM_API_KEY : str             = os.getenv("STEAM_API_KEY", "")
 DATA_COLLECTION_INTERVAL : int  = int(os.getenv("DATA_COLLECTION_INTERVAL", 5))  # Intervall in Minuten für die Datensammlung
 DISCORD_STATS_ENABLED : bool    = os.getenv("DISCORD_STATS_ENABLED", "True").lower() == "true"  # Aktiviert/Deaktiviert das Sammeln von Discord-Daten

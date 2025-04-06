@@ -3,6 +3,7 @@
 
 import json
 import logging
+from datetime import datetime
 from typing import Dict, Any, List
 
 from config import JSON_DATA_PATH
@@ -75,7 +76,7 @@ def get_user_birthdays(data: Dict[str, Any]) -> List[Dict[str, str]]:
     :return: List of dictionaries containing user IDs and birthdays.
     """
     people = data.get("people", [])
-    birthdays = [{"id": person["id"], "birthday": person["birthday"]} for person in people if "birthday" in person]
+    birthdays = [{"name": person["name"], "birthday": datetime.strptime(person["birthday"], "%d-%m-%Y")} for person in people if "birthday" in person]
     logging.debug(f"Extracted user birthdays: {birthdays}")
     return birthdays
 
