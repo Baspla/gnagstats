@@ -8,7 +8,8 @@ from discord.webhook.async_ import async_context
 from steam_web_api import Steam
 
 from collector import DataCollector
-from config import LOGGING_LEVEL, DISCORD_API_TOKEN, DISCORD_STATS_ENABLED, STEAM_API_KEY, DATA_COLLECTION_INTERVAL
+from config import LOGGING_LEVEL, DISCORD_API_TOKEN, DISCORD_STATS_ENABLED, STEAM_API_KEY, DATA_COLLECTION_INTERVAL, \
+    DEBUG_MODE
 from current_events import CurrentEventFetcher
 from db import Database
 from discord_bot import DiscordClient
@@ -41,6 +42,10 @@ def setup_logging():
 
 async def core_loop(collector,newsletter_creator):
     logging.info("Starting core loop...")
+    if DEBUG_MODE:
+        logging.info("Debug mode is enabled. Waiting for 10 seconds before starting the newsletter creation.")
+        await asyncio.sleep(10)
+        newsletter_creator.create_weekly_newsletter()
     await asyncio.sleep(DATA_COLLECTION_INTERVAL * 60)
     last_newsletter_day = None
     while True:

@@ -14,7 +14,7 @@ class NewsletterCreator:
         self.db = database
         pass
 
-
+    #TODO Newsletter für bestimmte KW erstellen nicht "letzten 7 Tage und hoffen das es Montag ist"
     def create_weekly_newsletter(self):
         future = dt.now() + datetime.timedelta(days=31)
         past = int(
@@ -53,6 +53,7 @@ class NewsletterCreator:
                           lstrip_blocks=True)
 
 
+
         def datetime_to_timestamp(value):
             if value is None:
                 return 0
@@ -80,6 +81,7 @@ class NewsletterCreator:
         # discord_time_alone and discord_time_voice are strings in the format "X Tage Y Stunden Z Minuten"
 
         rendered = template.render(data)
+        logging.debug(rendered)
         rendered = rendered.replace("\n", "\\n")
         discord_payload = f"""{{
             "embeds": [
