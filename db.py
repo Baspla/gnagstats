@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+from datetime import datetime
 
 from config import DB_PATH, DATA_COLLECTION_INTERVAL
 
@@ -108,6 +109,10 @@ class Database:
         :param end_time:
         :return:
         """
+        if isinstance(start_time, datetime):
+            start_time = int(start_time.timestamp())
+        if isinstance(end_time, datetime):
+            end_time = int(end_time.timestamp())
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
         cursor.execute('''
@@ -128,6 +133,10 @@ class Database:
         :param end_time:
         :return:
         """
+        if isinstance(start_time, datetime):
+            start_time = int(start_time.timestamp())
+        if isinstance(end_time, datetime):
+            end_time = int(end_time.timestamp())
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
         cursor.execute('''
@@ -142,6 +151,10 @@ class Database:
         return result
 
     def get_steam_most_played_together(self, start_time: int, end_time: int):
+        if isinstance(start_time, datetime):
+            start_time = int(start_time.timestamp())
+        if isinstance(end_time, datetime):
+            end_time = int(end_time.timestamp())
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
         cursor.execute('''
@@ -169,6 +182,10 @@ class Database:
         :param end_time:
         :return:
         """
+        if isinstance(start_time, datetime):
+            start_time = int(start_time.timestamp())
+        if isinstance(end_time, datetime):
+            end_time = int(end_time.timestamp())
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
         cursor.execute('''
@@ -189,6 +206,10 @@ class Database:
         :param end_time:
         :return:
         """
+        if isinstance(start_time, datetime):
+            start_time = int(start_time.timestamp())
+        if isinstance(end_time, datetime):
+            end_time = int(end_time.timestamp())
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
         cursor.execute('''
@@ -207,8 +228,14 @@ class Database:
         :param end_time:
         :return:
         """
+        if isinstance(start_time, datetime):
+            start_time = int(start_time.timestamp())
+        if isinstance(end_time, datetime):
+            end_time = int(end_time.timestamp())
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
+        # enable debug logging
+        connection.set_trace_callback(logging.debug)
         cursor.execute('''
             SELECT SUM(user_count) as accumulated_user_count
             FROM discord_voice_channels
@@ -225,6 +252,10 @@ class Database:
         :param end_time:
         :return:
         """
+        if isinstance(start_time, datetime):
+            start_time = int(start_time.timestamp())
+        if isinstance(end_time, datetime):
+            end_time = int(end_time.timestamp())
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
         cursor.execute('''

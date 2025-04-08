@@ -34,14 +34,13 @@ class CurrentEventFetcher:
     def get_birthdays(self):
         return self.data["user_birthdays"]
 
-    def get_birthdays_until(self, until: datetime):
-        now = datetime.now()
+    def get_birthdays_until(self,start: datetime, until: datetime):
         birthdays = []
         for birthday in self.data["user_birthdays"]:
-            if now < birthday["birthday"].replace(year=now.year) < until:
-                birthday["next_birthday"] = birthday["birthday"].replace(year=now.year)
+            if start < birthday["birthday"].replace(year=start.year) < until:
+                birthday["next_birthday"] = birthday["birthday"].replace(year=start.year)
                 birthdays.append(birthday)
-            elif now < birthday["birthday"].replace(year=now.year + 1) < until:
-                birthday["next_birthday"] = birthday["birthday"].replace(year=now.year + 1)
+            elif start < birthday["birthday"].replace(year=start.year + 1) < until:
+                birthday["next_birthday"] = birthday["birthday"].replace(year=start.year + 1)
                 birthdays.append(birthday)
         return birthdays

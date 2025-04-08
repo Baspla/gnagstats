@@ -2,6 +2,8 @@ import asyncio
 import logging
 import time
 from asyncio import create_task
+from datetime import datetime as dt
+import datetime
 
 import discord
 from discord.webhook.async_ import async_context
@@ -45,17 +47,27 @@ async def core_loop(collector,newsletter_creator):
     if DEBUG_MODE:
         logging.info("Debug mode is enabled. Waiting for 10 seconds before starting the newsletter creation.")
         await asyncio.sleep(10)
-        newsletter_creator.create_weekly_newsletter()
+        day_last_week = dt.now() - datetime.timedelta(days=7)
+        newsletter_creator.create_weekly_newsletter(day_last_week.isocalendar())
+        newsletter_creator.create_monthly_newsletter(dt.now().year, dt.now().month)
     await asyncio.sleep(DATA_COLLECTION_INTERVAL * 60)
-    last_newsletter_day = None
+    last_weekly_newsletter_day = None
+    last_monthly_newsletter_day = None
     while True:
         start_time = time.time()  # Record the start time
         now = time.localtime()
         day_of_year = now.tm_yday
-        if now.tm_wday == 0 and now.tm_hour == 9 and 0 <= now.tm_min <= DATA_COLLECTION_INTERVAL * 2 and last_newsletter_day != day_of_year:
+        # Monday at 9:00 AM
+        if now.tm_wday == 0 and now.tm_hour == 9 and 0 <= now.tm_min <= DATA_COLLECTION_INTERVAL * 2 and last_weekly_newsletter_day != day_of_year:
             logging.info("It's time to publish the newsletter!")
-            newsletter_creator.create_weekly_newsletter()
-            last_newsletter_day = day_of_year
+            day_last_week = dt.now() - datetime.timedelta(days=7)
+            newsletter_creator.create_weekly_newsletter(day_last_week.isocalendar())
+            last_weekly_newsletter_day = day_of_year
+        # First day of the month at 12:00 PM
+        if now.tm_mday == 1 and now.tm_hour == 12 and 0 <= now.tm_min <= DATA_COLLECTION_INTERVAL * 2 and last_monthly_newsletter_day != day_of_year:
+            logging.info("It's time to publish the monthly newsletter!")
+            newsletter_creator.create_monthly_newsletter(dt.now().year, dt.now().month)
+            last_monthly_newsletter_day = day_of_year
         await collector.collect_discord_data()
         await collector.collect_steam_data()
         # Calculate the next scheduled time

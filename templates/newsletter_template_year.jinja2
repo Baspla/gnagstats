@@ -1,0 +1,50 @@
+## **Gnag Jahresrückblick {{ year }}** 🎉
+Willkommen zum großen Gnag Jahresrückblick! ✨
+
+### **Was war los im Discord?** 🎙️
+{% if discord_busiest_channel %}
+Der aktivste Channel des Jahres war **{{ discord_busiest_channel }}**! 🔥
+Hier wurde am meisten diskutiert, geteilt und gelacht. Ein echter Hotspot der Community!
+{% else %}
+Dieses Jahr gab es keinen besonders aktiven Channel – vielleicht wird das nächste Jahr lebhafter? 😴
+{% endif %}
+
+{% if discord_users_voice == 0 %}
+Niemand hat dieses Jahr Zeit in einem Voice Channel verbracht. 🤐
+Vielleicht wird das kommende Jahr gesprächiger? 🗨️
+{% elif discord_users_voice == 1 %}
+Nur eine Person hat dieses Jahr einen Voice Channel genutzt – ein einsamer Pionier! 🙃
+Wir hoffen, dass nächstes Jahr mehr Leute ihre Stimme hören lassen.
+{% else %}
+Insgesamt haben **{{ discord_users_voice }} Leute** die Voice Channels genutzt und dabei beeindruckende **{{ discord_time_voice }}** miteinander gesprochen. 👥
+Das zeigt, wie wichtig Gespräche und gemeinsame Momente für unsere Community sind!
+{% endif %}
+
+{% if discord_time_alone != "0 Minuten" %}
+Für ganze **{{ discord_time_alone }}** saß jemand alleine in einem Voice Channel. 😔
+Vielleicht können wir im nächsten Jahr dafür sorgen, dass niemand allein bleibt! 😊
+{% else %}
+Niemand hat dieses Jahr alleine Zeit in einem Voice Channel verbracht – ein tolles Zeichen für Zusammenhalt! 💪
+{% endif %}
+
+### **Where's the gaming?** 🎮
+Gaming ist ein großer Teil unserer Community, und hier sind die Highlights des Jahres:
+
+{% if steam_most_played_together %}
+Das meistgespielte Spiel gemeinsam war **{{ steam_most_played_together }}**! 🤝
+Ein echtes Zeichen dafür, wie sehr ihr euch beim Zocken unterstützt und Spaß zusammen habt.
+{% else %}
+Dieses Jahr wurde kein einziges Spiel gemeinsam gespielt – vielleicht wird das nächste Jahr kooperativer? 🎮
+{% endif %}
+
+{% if steam_most_played %}
+Das meistgespielte Game insgesamt war **{{ steam_most_played }}**! 🏆
+Ein echter Favorit, der viele Stunden Unterhaltung gebracht hat.
+{% else %}
+Dieses Jahr wurde kein Spiel besonders häufig gespielt – vielleicht entdeckt ihr nächstes Jahr neue Favoriten? 🌟
+{% endif %}
+
+---
+
+✨ Danke fürs Lesen der ganzen Newsletter! ✨
+Lasst uns gemeinsam ins neue Jahr starten. Auf ein fantastisches **{{ year + 1 }}**! 🎆
