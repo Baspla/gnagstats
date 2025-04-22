@@ -1,11 +1,6 @@
 ## **Monatlicher Gnag Newsletter** 📢
 Hier ist der Gnag Newsletter für **{{ month_name }}**!
 ### **Was war los im Discord?** 🎙️
-{% if discord_busiest_channel %}
-Diesen Monat war am meisten in **{{ discord_busiest_channel }}** los! 🔥
-{% else %}
-Diesen Monat gab es keinen besonders aktiven Channel. 😴
-{% endif %}
 {% if discord_users_voice == 0 %}
 Diesen Monat war niemand in einem Voice Channel. 🤐
 {% elif discord_users_voice == 1 %}
@@ -19,15 +14,22 @@ Für ganze **{{ discord_time_alone }}** saß jemand alleine in einem Voice Chann
 Niemand hat diesen Monat alleine Zeit in einem Voice Channel verbracht. 😊
 {% endif %}
 ### **Where's the gaming?** 🎮
-{% if steam_most_played_together %}
-Gemeinsam wurde am meisten **{{ steam_most_played_together }}** gespielt. 🤝
+{% if steam_most_played_list_capped is none or steam_most_played_list_capped|length == 0 %}
+Es wurden keine Spiele besonders häufig gespielt. 💤
 {% else %}
-Diesen Monat wurde kein einziges Spiel gemeinsam gespielt.
+Die meistgespielten Spiele diesen Monat:
+{% for game in steam_most_played_list_capped %}
+- {{ game[0] }}
+{% endfor %}
 {% endif %}
-{% if steam_most_played %}
-Das over-all meistgespielte Game war **{{ steam_most_played }}**. 🏆
+
+{% if steam_most_played_together_list_capped is none or steam_most_played_together_list_capped|length == 0 %}
+Es wurden keine Spiele gemeinsam gespielt. 💤
 {% else %}
-Diesen Monat wurde kein Spiel besonders häufig gespielt.
+Diese Spiele wurden am häufigsten gemeinsam gezockt:
+{% for game in steam_most_played_together_list_capped %}
+- {{ game[0] }}
+{% endfor %}
 {% endif %}
 ### **Was geht grade ab?** 📅
 {% if discord_active_events|length == 0 %}
@@ -85,11 +87,11 @@ Die Beschreibung lautet: {{ event.description }}
 {% if birthdays|length == 0 %}
 Im nächsten Monat hat niemand Geburtstag. 🎂
 {% elif birthdays|length == 1 %}
-Am <t:{{ birthdays[0].next_birthday | datetime_to_timestamp }}:D> hat **{{ birthdays[0].name }}** Geburtstag! 🎉🎂
+Am <t:{{ birthdays[0].next_birthday | datetime_to_timestamp }}:D> hat **{{ birthdays[0].name }}** Geburtstag!  🎉🎂
 {% else %}
 Folgende Geburtstage stehen an:
     {% for birthday in birthdays %}
-    Am <t:{{ birthday.next_birthday | datetime_to_timestamp }}:D> hat **{{ birthday.name }}** Geburtstag! 🎉🎈
+    Am <t:{{ birthday.next_birthday | datetime_to_timestamp }}:D> hat **{{ birthday.name }}** Geburtstag!  🎉🎈
     {% endfor %}
 {% endif %}
 

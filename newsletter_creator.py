@@ -63,6 +63,10 @@ class NewsletterCreator:
         most_played_list = self.db.get_steam_most_played_games(past_start, past_end)
         most_played_together_list = self.db.get_steam_most_played_together(past_start, past_end)
         most_concurrent_list = self.db.get_steam_most_concurrent_players(past_start, past_end)
+        most_played_list_capped = most_played_list[:5] if most_played_list else None
+        most_played_together_list_capped = most_played_together_list[:3] if most_played_together_list else None
+        most_concurrent_list_capped = most_concurrent_list[:3] if most_concurrent_list else None
+
 
         most_played = most_played_list[0][0] if most_played_list else None
         most_played_together = most_played_together_list[0][0] if most_played_together_list else None
@@ -83,6 +87,9 @@ class NewsletterCreator:
             "steam_most_played_together_list": most_played_together_list, # Liste der Spiele mit den meisten Spielstunden mit zwei oder mehr Leuten
             "steam_most_concurrent_list": most_concurrent_list, # Liste der Spiele mit den meisten Spielern gleichzeitig
             "discord_busiest_channels_list": busiest_channels, # Liste der Channels mit den meisten Besuchern
+            "steam_most_played_list_capped": most_played_list_capped, # Liste der Spiele mit den meisten Spielstunden (max 5)
+            "steam_most_played_together_list_capped": most_played_together_list_capped, # Liste der Spiele mit den meisten Spielstunden mit zwei oder mehr Leuten (max 3)
+            "steam_most_concurrent_list_capped": most_concurrent_list_capped, # Liste der Spiele mit den meisten Spielern gleichzeitig (max 3)
             "discord_active_events": active_events, # Welche Discord Events sind aktiv
             "discord_non_active_events": non_active_events, # Welche Discord Events sind nicht aktiv
             "birthdays": birthdays # Welche Geburtstage stehen an
