@@ -271,36 +271,36 @@ class Database:
     # Utilities
     #
 
-    def timesteps_to_human_readable(self, timesteps: int):
-        """
-        Convert a timestep to a human-readable format.
-        One timestep is DATA_COLLECTION_INTERVAL minutes long.
-        :param timesteps:
-        :return:
-        """
-        logging.debug(f"Converting {timesteps} timesteps to human-readable format.")
-        if not timesteps:
-            return "0 Minuten"
-        timesteps = timesteps * DATA_COLLECTION_INTERVAL
-        days = timesteps // (24 * 60)
-        hours = (timesteps % (24 * 60)) // 60
-        minutes = timesteps % 60
-        output = ""
+def timesteps_to_human_readable( timesteps: int):
+    """
+    Convert a timestep to a human-readable format.
+    One timestep is DATA_COLLECTION_INTERVAL minutes long.
+    :param timesteps:
+    :return:
+    """
+    logging.debug(f"Converting {timesteps} timesteps to human-readable format.")
+    if not timesteps:
+        return "0 Minuten"
+    timesteps = timesteps * DATA_COLLECTION_INTERVAL
+    days = timesteps // (24 * 60)
+    hours = (timesteps % (24 * 60)) // 60
+    minutes = timesteps % 60
+    output = ""
 
-        if days == 1:
-            output += f"{days} Tag "
-        elif days > 1:
-            output += f"{days} Tage "
+    if days == 1:
+        output += f"{days} Tag "
+    elif days > 1:
+        output += f"{days} Tage "
 
-        if hours == 1:
-            output += f"{hours} Stunde "
-        elif hours > 1:
-            output += f"{hours} Stunden "
+    if hours == 1:
+        output += f"{hours} Stunde "
+    elif hours > 1:
+        output += f"{hours} Stunden "
 
-        if minutes == 1:
-            output += f"{minutes} Minute"
-        elif minutes > 1:
-            output += f"{minutes} Minuten"
+    if minutes == 1:
+        output += f"{minutes} Minute"
+    elif minutes > 1:
+        output += f"{minutes} Minuten"
 
-        return output.strip()
+    return output.strip()
 

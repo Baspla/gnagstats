@@ -2,7 +2,7 @@ import logging
 from datetime import datetime as dt
 import datetime
 
-from db import Database
+from db import Database, timesteps_to_human_readable
 from jinja2 import Environment, FileSystemLoader
 from config import DISCORD_WEBHOOK_URL
 import requests
@@ -47,11 +47,8 @@ class NewsletterCreator:
 
     def gather_data(self,past_start:datetime, past_end:datetime, future_start:datetime, future_end:datetime):
         int_lone_time = self.db.get_discord_total_lonely_voice_activity(past_start, past_end)[0]
-        logging.debug(f"Lonely time: {int_lone_time}")
-        lone_time = self.db.timesteps_to_human_readable(int_lone_time)
 
         int_voice_time = self.db.get_discord_total_voice_activity(past_start, past_end)[0]
-        voice_time = self.db.timesteps_to_human_readable(int_voice_time)
 
         unique_voice = self.db.get_discord_unique_active_users(past_start, past_end)[0]
         if unique_voice is None:
@@ -67,7 +64,6 @@ class NewsletterCreator:
         most_played_together_list_capped = most_played_together_list[:3] if most_played_together_list else None
         most_concurrent_list_capped = most_concurrent_list[:3] if most_concurrent_list else None
 
-
         most_played = most_played_list[0][0] if most_played_list else None
         most_played_together = most_played_together_list[0][0] if most_played_together_list else None
         most_concurrent = most_concurrent_list[0][0] if most_concurrent_list else None
@@ -76,8 +72,8 @@ class NewsletterCreator:
         birthdays = self.current_event_fetcher.get_birthdays_until(future_start,future_end)
 
         data = {
-            "discord_time_alone": lone_time, # Wie lange war jemand alleine in einem Voice Channel
-            "discord_time_voice": voice_time, # Wie lange waren alle in einem Voice Channel kumuliert
+            "discord_time_alone": int_lone_time, # Wie lange war jemand alleine in einem Voice Channel
+            "discord_time_voice": int_voice_time, # Wie lange waren alle in einem Voice Channel kumuliert
             "discord_users_voice": unique_voice, # Wie viele einzigartige User waren in einem Voice Channel
             "discord_busiest_channel": busiest_channel, # Welcher Channel war am meisten besucht
             "steam_most_played": most_played, # Welches Spiel wurde am meisten gespielt
@@ -114,6 +110,7 @@ class NewsletterCreator:
                           lstrip_blocks=True)
 
         env.filters['datetime_to_timestamp'] = datetime_to_timestamp
+        env.filters['timesteps_to_human_readable'] = timesteps_to_human_readable
         template = env.get_template('newsletter_template_month.jinja2')
 
         data = self.gather_data(past_start,past_end,dt.now(),future)
@@ -144,6 +141,7 @@ class NewsletterCreator:
                           lstrip_blocks=True)
 
         env.filters['datetime_to_timestamp'] = datetime_to_timestamp
+        env.filters['timesteps_to_human_readable'] = timesteps_to_human_readable
         template = env.get_template('newsletter_template_week.jinja2')
 
         data = self.gather_data(past_start,past_end,dt.now(),future)

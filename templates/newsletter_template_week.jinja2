@@ -6,10 +6,10 @@ Diese Woche war niemand in einem Voice Channel. 🤐
 {% elif discord_users_voice == 1 %}
 Es war nur einmal jemand diese Woche da. 🙃
 {% else %}
-Insgesamt waren **{{ discord_users_voice }} Leute** aktiv in den Voice Channels und haben **{{ discord_time_voice }}** miteinander gesprochen. 👥
+Insgesamt waren **{{ discord_users_voice }} Leute** aktiv in den Voice Channels und haben **{{ discord_time_voice|timesteps_to_human_readable }}** miteinander gesprochen. 👥
 {% endif %}
-{% if discord_time_alone != "0 Minuten" %}
-Für ganze **{{ discord_time_alone }}** saß jemand alleine in einem Voice Channel. 😔
+{% if discord_time_alone|timesteps_to_human_readable != "0 Minuten" %}
+Für ganze **{{ discord_time_alone|timesteps_to_human_readable }}** saß jemand alleine in einem Voice Channel. 😔
 {% else %}
 Niemand hat diese Woche alleine Zeit in einem Voice Channel verbracht. 😊
 {% endif %}
