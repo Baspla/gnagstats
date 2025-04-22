@@ -43,4 +43,7 @@ class CurrentEventFetcher:
             elif start < birthday["birthday"].replace(year=start.year + 1) < until:
                 birthday["next_birthday"] = birthday["birthday"].replace(year=start.year + 1)
                 birthdays.append(birthday)
+
+        birthdays.sort(key=lambda x: x["next_birthday"])
+
         return birthdays

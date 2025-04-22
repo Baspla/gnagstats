@@ -72,16 +72,20 @@ class NewsletterCreator:
         birthdays = self.current_event_fetcher.get_birthdays_until(future_start,future_end)
 
         data = {
-            "discord_time_alone": lone_time,
-            "discord_time_voice": voice_time,
-            "discord_users_voice": unique_voice,
-            "discord_busiest_channel": busiest_channel,
-            "steam_most_played": most_played,
-            "steam_most_played_together": most_played_together,
-            "steam_most_concurrent_players": most_concurrent,
-            "discord_active_events": active_events,
-            "discord_non_active_events": non_active_events,
-            "birthdays": birthdays
+            "discord_time_alone": lone_time, # Wie lange war jemand alleine in einem Voice Channel
+            "discord_time_voice": voice_time, # Wie lange waren alle in einem Voice Channel kumuliert
+            "discord_users_voice": unique_voice, # Wie viele einzigartige User waren in einem Voice Channel
+            "discord_busiest_channel": busiest_channel, # Welcher Channel war am meisten besucht
+            "steam_most_played": most_played, # Welches Spiel wurde am meisten gespielt
+            "steam_most_played_together": most_played_together, # Welches Spiel wurde am meisten mit zwei oder mehr Leuten gespielt
+            "steam_most_concurrent_players": most_concurrent, # Welches Spiel hatte die meisten Spieler gleichzeitig
+            "steam_most_played_list": most_played_list, # Liste der Spiele mit den meisten Spielstunden
+            "steam_most_played_together_list": most_played_together_list, # Liste der Spiele mit den meisten Spielstunden mit zwei oder mehr Leuten
+            "steam_most_concurrent_list": most_concurrent_list, # Liste der Spiele mit den meisten Spielern gleichzeitig
+            "discord_busiest_channels_list": busiest_channels, # Liste der Channels mit den meisten Besuchern
+            "discord_active_events": active_events, # Welche Discord Events sind aktiv
+            "discord_non_active_events": non_active_events, # Welche Discord Events sind nicht aktiv
+            "birthdays": birthdays # Welche Geburtstage stehen an
         }
         # birthdays are a list of dictionaries with keys "name" and "birthday" and "next_birthday"
         # discord events are a list of objects with parameters "name", "start_time", "end_time", "description"

@@ -61,12 +61,18 @@ async def core_loop(collector,newsletter_creator):
         if now.tm_wday == 0 and now.tm_hour == 9 and 0 <= now.tm_min <= DATA_COLLECTION_INTERVAL * 2 and last_weekly_newsletter_day != day_of_year:
             logging.info("It's time to publish the newsletter!")
             day_last_week = dt.now() - datetime.timedelta(days=7)
-            newsletter_creator.create_weekly_newsletter(day_last_week.isocalendar())
+            try:
+                newsletter_creator.create_weekly_newsletter(day_last_week.isocalendar())
+            except Exception as e:
+                logging.error(f"Error creating weekly newsletter: {e}")
             last_weekly_newsletter_day = day_of_year
         # First day of the month at 12:00 PM
         if now.tm_mday == 1 and now.tm_hour == 12 and 0 <= now.tm_min <= DATA_COLLECTION_INTERVAL * 2 and last_monthly_newsletter_day != day_of_year:
             logging.info("It's time to publish the monthly newsletter!")
-            newsletter_creator.create_monthly_newsletter(dt.now().year, dt.now().month)
+            try:
+                newsletter_creator.create_monthly_newsletter(dt.now().year, dt.now().month)
+            except Exception as e:
+                logging.error(f"Error creating monthly newsletter: {e}")
             last_monthly_newsletter_day = day_of_year
         try:
             await collector.collect_discord_data()
