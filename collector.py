@@ -1,8 +1,4 @@
-import asyncio
 import logging
-import time
-
-from config import DATA_COLLECTION_INTERVAL
 from db import Database
 from discord_bot import DiscordClient
 from steam_web_api import Steam

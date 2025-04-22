@@ -68,8 +68,18 @@ async def core_loop(collector,newsletter_creator):
             logging.info("It's time to publish the monthly newsletter!")
             newsletter_creator.create_monthly_newsletter(dt.now().year, dt.now().month)
             last_monthly_newsletter_day = day_of_year
-        await collector.collect_discord_data()
-        await collector.collect_steam_data()
+        try:
+            await collector.collect_discord_data()
+        except discord.Forbidden:
+            logging.warning("Discord client is not authorized to access the guilds.")
+        except discord.HTTPException as e:
+            logging.warning(f"Discord HTTP exception: {e}")
+        except discord.ClientException as e:
+            logging.warning(f"Discord client exception: {e}")
+        try:
+            await collector.collect_steam_data()
+        except Exception as e:
+            logging.warning(f"Steam data collection exception: {e}")
         # Calculate the next scheduled time
         elapsed_time :float = time.time() - start_time
         sleep_time = DATA_COLLECTION_INTERVAL * 60 - elapsed_time
