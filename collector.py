@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime
+
 from db import Database
 from discord_bot import DiscordClient
 from steam_web_api import Steam
@@ -17,6 +19,7 @@ class DataCollector:
             logging.warning("Discord client is not ready.")
             return
         logging.debug("Collecting Discord data...")
+        timestamp = datetime.now().timestamp()
         for guild in self.discord_client.guilds:
             logging.debug(f"Guild: {guild.name} (ID: {guild.id})")
             if str(guild.id) in self.data["guild_ids"]:
@@ -27,11 +30,11 @@ class DataCollector:
                     for member in channel.members:
                         if str(member.id) in self.data["user_discord_ids"]:  # Nur Eingetragene Leute tracken
                             tracked_users += 1
-                            self.db.insert_discord_voice_activity(str(member.id), channel.name, str(guild.id))
+                            self.db.insert_discord_voice_activity(timestamp,str(member.id), channel.name, str(guild.id))
                             if member.activity:
-                                self.db.insert_discord_game_activity(str(member.id), str(member.activity))
+                                self.db.insert_discord_game_activity(timestamp,str(member.id), str(member.activity))
                     if user_count > 0:
-                        self.db.insert_discord_voice_channel(
+                        self.db.insert_discord_voice_channel(timestamp,
                             channel.name,
                             str(guild.id),
                             user_count,
@@ -41,6 +44,7 @@ class DataCollector:
 
     async def collect_steam_data(self):
         logging.debug("Collecting Steam data...")
+        timestamp = datetime.now().timestamp()
         for user in self.data["user_steam_ids"]:
             logging.debug(f"Collecting data for Steam user {user}")
             # Maybe personaname änderungen tracken?
@@ -49,7 +53,7 @@ class DataCollector:
                 logging.debug(f"User data: {user}")
                 if user["player"].get("gameextrainfo"):
                     logging.debug(f"User is playing: {user["player"]["gameextrainfo"]}")
-                    self.db.insert_steam_game_activity(user["player"]["steamid"],user["player"]["gameextrainfo"])
+                    self.db.insert_steam_game_activity(timestamp,user["player"]["steamid"],user["player"]["gameextrainfo"])
             else:
                 logging.debug(f"Failed to collect data for Steam user {user}")
         pass
