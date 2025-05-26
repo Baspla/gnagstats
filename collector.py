@@ -19,7 +19,7 @@ class DataCollector:
             logging.warning("Discord client is not ready.")
             return
         logging.debug("Collecting Discord data...")
-        timestamp = datetime.now().timestamp()
+        timestamp = (datetime.now().timestamp()// 300) * 300
         for guild in self.discord_client.guilds:
             logging.debug(f"Guild: {guild.name} (ID: {guild.id})")
             if str(guild.id) in self.data["guild_ids"]:
@@ -44,7 +44,7 @@ class DataCollector:
 
     async def collect_steam_data(self):
         logging.debug("Collecting Steam data...")
-        timestamp = datetime.now().timestamp()
+        timestamp = (datetime.now().timestamp()// 300) * 300
         for user in self.data["user_steam_ids"]:
             logging.debug(f"Collecting data for Steam user {user}")
             # Maybe personaname änderungen tracken?
