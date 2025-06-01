@@ -6,6 +6,8 @@ from db import Database, timesteps_to_human_readable
 from jinja2 import Environment, FileSystemLoader
 from config import DISCORD_WEBHOOK_URL
 import requests
+import locale
+locale.setlocale(locale.LC_TIME, "de_DE.UTF-8")
 
 
 def post_to_discord(rendered):
