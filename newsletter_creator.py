@@ -13,7 +13,7 @@ def post_to_discord(rendered):
         "embeds": [
             {{
                 "description": "{rendered}",
-                "timestamp": "{dt.now().isoformat()}",
+                "timestamp": "{dt.now(datetime.timezone.utc).isoformat()}",
                 "color": 14924912,
                 "fields": []
             }}

@@ -49,7 +49,9 @@ async def core_loop(collector,newsletter_creator):
         await asyncio.sleep(10)
         day_last_week = dt.now() - datetime.timedelta(days=7)
         newsletter_creator.create_weekly_newsletter(day_last_week.isocalendar())
-        newsletter_creator.create_monthly_newsletter(dt.now().year, dt.now().month)
+        last_month = dt.now().month - 1 if dt.now().month > 1 else 12
+        year = dt.now().year if dt.now().month > 1 else dt.now().year - 1
+        newsletter_creator.create_monthly_newsletter(year, last_month)
     await asyncio.sleep(DATA_COLLECTION_INTERVAL * 60)
     last_weekly_newsletter_day = None
     last_monthly_newsletter_day = None
@@ -70,7 +72,9 @@ async def core_loop(collector,newsletter_creator):
         if now.tm_mday == 1 and now.tm_hour == 12 and 0 <= now.tm_min <= DATA_COLLECTION_INTERVAL * 2 and last_monthly_newsletter_day != day_of_year:
             logging.info("It's time to publish the monthly newsletter!")
             try:
-                newsletter_creator.create_monthly_newsletter(dt.now().year, dt.now().month)
+                last_month = dt.now().month - 1 if dt.now().month > 1 else 12
+                year = dt.now().year if dt.now().month > 1 else dt.now().year - 1
+                newsletter_creator.create_monthly_newsletter(year, last_month)
             except Exception as e:
                 logging.error(f"Error creating monthly newsletter: {e}")
             last_monthly_newsletter_day = day_of_year
