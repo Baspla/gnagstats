@@ -70,7 +70,7 @@ class NewsletterCreator:
         most_played_together = most_played_together_list[0][0] if most_played_together_list else None
         most_concurrent = most_concurrent_list[0][0] if most_concurrent_list else None
         active_events = self.current_event_fetcher.get_active_guild_events()
-        non_active_events = self.current_event_fetcher.get_non_active_guild_events_starting_until(future_end)
+        non_active_events = self.current_event_fetcher.get_non_active_guild_events_starting_until(future_end, future_start)
         birthdays = self.current_event_fetcher.get_birthdays_until(future_start,future_end)
 
         data = {
