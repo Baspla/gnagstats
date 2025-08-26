@@ -28,8 +28,19 @@ class CurrentEventFetcher:
         return [event for event in self.get_guild_events() if event.status == discord.EventStatus.active]
 
     def get_non_active_guild_events_starting_until(self, until: datetime, ends_after: datetime):
-        return [event for event in self.get_guild_events() if
-                event.status != discord.EventStatus.active and event.start_time <= until.astimezone() and event.end_time >= ends_after.astimezone()]
+        result = []
+        for event in self.get_guild_events():
+            # Ensure event.start_time and event.end_time are both not None
+            if (
+                event.status != discord.EventStatus.active and
+                event.start_time is not None and
+                event.end_time is not None and
+                event.start_time <= until.astimezone() and
+                event.end_time >= ends_after.astimezone()
+            ):
+                result.append(event)
+        return result
+
 
     def get_birthdays(self):
         return self.data["user_birthdays"]
