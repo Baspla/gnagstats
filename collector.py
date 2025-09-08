@@ -1,6 +1,8 @@
 import logging
 from datetime import datetime
 
+from discord import ActivityType
+
 from db import Database
 from discord_bot import DiscordClient
 from steam_web_api import Steam
@@ -46,10 +48,7 @@ class DataCollector:
                         if member.activity:
                             if member.activity.type == ActivityType.playing:
                                 logging.debug(f"User {member.name} discord activity details: {member.activity}")
-                                activity_attrs = [
-                                    "name", "type", "state", "application_id", "details", "url", "start", "end", "game", "flags", "party", "platform"
-                                ]
-                                self.db.insert_discord_game_activity(timestamp, str(member.id), str(member.activity))
+                                self.db.insert_discord_game_activity(timestamp, str(member.id), str(member.activity.name))
                             else:
                                 logging.debug(f"User {member.name} activity is not of type 'playing': {member.activity.type}")
         pass
