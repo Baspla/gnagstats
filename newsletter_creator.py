@@ -238,6 +238,7 @@ class NewsletterCreator:
 
         env.filters['datetime_to_timestamp'] = datetime_to_timestamp
         env.filters['timesteps_to_human_readable'] = timesteps_to_human_readable
+        env.filters['seconds_to_human_readable'] = seconds_to_human_readable
         template = env.get_template('newsletter_template_week.jinja2')
 
         data = self.gather_data(past_start,past_end,dt.now(),future)
