@@ -90,19 +90,19 @@ class NewsletterCreator:
                 - birthdays: Liste der bevorstehenden Geburtstage
         """
         # Aktueller Zeitraum
-        int_lone_time_row = self.db.get_discord_total_lonely_voice_activity(past_start, past_end)
+        int_lone_time_row = self.db.newsletter_query_get_discord_total_lonely_voice_activity(past_start, past_end)
         int_lone_time = int_lone_time_row["total_voicetime"] if isinstance(int_lone_time_row, dict) and "total_voicetime" in int_lone_time_row else int_lone_time_row[0] if int_lone_time_row else 0
-        int_voice_time_row = self.db.get_discord_total_voice_activity(past_start, past_end)
+        int_voice_time_row = self.db.newsletter_query_get_discord_total_voice_activity(past_start, past_end)
         int_voice_time = int_voice_time_row["total_voicetime"] if isinstance(int_voice_time_row, dict) and "total_voicetime" in int_voice_time_row else int_voice_time_row[0] if int_voice_time_row else 0
-        unique_voice_row = self.db.get_discord_unique_active_users(past_start, past_end)
+        unique_voice_row = self.db.newsletter_query_get_discord_unique_active_users(past_start, past_end)
         unique_voice = unique_voice_row["unique_users"] if isinstance(unique_voice_row, dict) and "unique_users" in unique_voice_row else unique_voice_row[0] if unique_voice_row else 0
         if unique_voice is None:
             unique_voice = 0
-        busiest_channels = self.db.get_discord_busiest_voice_channels(past_start, past_end)
+        busiest_channels = self.db.newsletter_query_get_discord_busiest_voice_channels(past_start, past_end)
         busiest_channel = busiest_channels[0]["channel_name"] if busiest_channels and isinstance(busiest_channels[0], dict) and "channel_name" in busiest_channels[0] else busiest_channels[0][0] if busiest_channels else None
-        most_played_list = self.db.get_steam_most_played_games(past_start, past_end)
-        most_played_together_list = self.db.get_steam_most_played_together(past_start, past_end)
-        most_concurrent_list = self.db.get_steam_most_concurrent_players(past_start, past_end)
+        most_played_list = self.db.newsletter_query_get_steam_most_played_games(past_start, past_end)
+        most_played_together_list = self.db.newsletter_query_get_steam_most_played_together(past_start, past_end)
+        most_concurrent_list = self.db.newsletter_query_get_steam_most_concurrent_players(past_start, past_end)
         most_played_list_capped = most_played_list[:5] if most_played_list else None
         most_played_together_list_capped = most_played_together_list[:3] if most_played_together_list else None
         most_concurrent_list_capped = most_concurrent_list[:3] if most_concurrent_list else None
@@ -117,17 +117,17 @@ class NewsletterCreator:
         period_length = (past_end - past_start)
         prev_start = past_start - period_length
         prev_end = past_start
-        prev_lone_time_row = self.db.get_discord_total_lonely_voice_activity(prev_start, prev_end)
+        prev_lone_time_row = self.db.newsletter_query_get_discord_total_lonely_voice_activity(prev_start, prev_end)
         prev_lone_time = prev_lone_time_row["total_voicetime"] if isinstance(prev_lone_time_row, dict) and "total_voicetime" in prev_lone_time_row else prev_lone_time_row[0] if prev_lone_time_row else 0
-        prev_voice_time_row = self.db.get_discord_total_voice_activity(prev_start, prev_end)
+        prev_voice_time_row = self.db.newsletter_query_get_discord_total_voice_activity(prev_start, prev_end)
         prev_voice_time = prev_voice_time_row["total_voicetime"] if isinstance(prev_voice_time_row, dict) and "total_voicetime" in prev_voice_time_row else prev_voice_time_row[0] if prev_voice_time_row else 0
-        prev_unique_voice_row = self.db.get_discord_unique_active_users(prev_start, prev_end)
+        prev_unique_voice_row = self.db.newsletter_query_get_discord_unique_active_users(prev_start, prev_end)
         prev_unique_voice = prev_unique_voice_row["unique_users"] if isinstance(prev_unique_voice_row, dict) and "unique_users" in prev_unique_voice_row else prev_unique_voice_row[0] if prev_unique_voice_row else 0
         if prev_unique_voice is None:
             prev_unique_voice = 0
-        prev_most_played_list = self.db.get_steam_most_played_games(prev_start, prev_end)
-        prev_most_played_together_list = self.db.get_steam_most_played_together(prev_start, prev_end)
-        prev_most_concurrent_list = self.db.get_steam_most_concurrent_players(prev_start, prev_end)
+        prev_most_played_list = self.db.newsletter_query_get_steam_most_played_games(prev_start, prev_end)
+        prev_most_played_together_list = self.db.newsletter_query_get_steam_most_played_together(prev_start, prev_end)
+        prev_most_concurrent_list = self.db.newsletter_query_get_steam_most_concurrent_players(prev_start, prev_end)
 
         # Hilfsfunktionen für Prozent und Absolut
         def calc_change(current, previous):

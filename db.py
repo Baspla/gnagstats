@@ -102,7 +102,7 @@ class Database:
     # Queries
     #
 
-    def get_steam_most_played_games(self, start_time: int, end_time: int):
+    def newsletter_query_get_steam_most_played_games(self, start_time: int, end_time: int):
         """
         Get the most played games in a given time range, including total playtime.
         :param start_time:
@@ -126,7 +126,7 @@ class Database:
         connection.close()
         return result
 
-    def get_steam_most_concurrent_players(self, start_time: int, end_time: int):
+    def newsletter_query_get_steam_most_concurrent_players(self, start_time: int, end_time: int):
         """
         Get the games played by most players concurrently in a given time range.
         :param start_time:
@@ -150,7 +150,7 @@ class Database:
         connection.close()
         return result
 
-    def get_steam_most_played_together(self, start_time: int, end_time: int):
+    def newsletter_query_get_steam_most_played_together(self, start_time: int, end_time: int):
         if isinstance(start_time, datetime):
             start_time = int(start_time.timestamp())
         if isinstance(end_time, datetime):
@@ -175,7 +175,7 @@ class Database:
         connection.close()
         return result
 
-    def get_discord_busiest_voice_channels(self, start_time: int, end_time: int):
+    def newsletter_query_get_discord_busiest_voice_channels(self, start_time: int, end_time: int):
         """
         Get the busiest Discord voice channels in a given time range.
         Calculated by summing up user_count * collection_interval for each channel with usercounts > 1.
@@ -201,7 +201,7 @@ class Database:
         connection.close()
         return result
 
-    def get_discord_total_voice_activity(self, start_time: int, end_time: int):
+    def newsletter_query_get_discord_total_voice_activity(self, start_time: int, end_time: int):
         """
         Get the total Discord voice activity time (in seconds) in a given time range for channels with >1 users.
         :param start_time:
@@ -223,7 +223,7 @@ class Database:
         connection.close()
         return result
 
-    def get_discord_total_lonely_voice_activity(self, start_time: int, end_time: int):
+    def newsletter_query_get_discord_total_lonely_voice_activity(self, start_time: int, end_time: int):
         """
         Get the total Discord voice activity time (in seconds) in a given time range for channels with only 1 user.
         :param start_time:
@@ -245,7 +245,7 @@ class Database:
         connection.close()
         return result
 
-    def get_discord_unique_active_users(self, start_time: int, end_time: int):
+    def newsletter_query_get_discord_unique_active_users(self, start_time: int, end_time: int):
         """
         Get the unique active users in a given time range.
         :param start_time:
@@ -270,6 +270,68 @@ class Database:
     #
     # Utilities
     #
+
+    #
+    # Web queries (separate from newsletter queries)
+    #
+
+    def web_query_get_steam_game_activity(self, start_time: int | None = None, end_time: int | None = None):
+        """
+        Return raw steam game activity rows for the web app.
+        Each row contains: timestamp, steam_id, game_name, collection_interval.
+        Optional start/end timestamps (epoch seconds) can limit the range.
+        """
+        # Normalize optional datetime inputs
+        if isinstance(start_time, datetime):
+            start_time = int(start_time.timestamp())
+        if isinstance(end_time, datetime):
+            end_time = int(end_time.timestamp())
+
+        connection = sqlite3.connect(DB_PATH)
+        cursor = connection.cursor()
+
+        if start_time is not None and end_time is not None:
+            cursor.execute(
+                """
+                SELECT timestamp, steam_id, game_name, collection_interval
+                FROM steam_game_activity
+                WHERE timestamp BETWEEN ? AND ?
+                ORDER BY timestamp ASC
+                """,
+                (start_time, end_time),
+            )
+        elif start_time is not None:
+            cursor.execute(
+                """
+                SELECT timestamp, steam_id, game_name, collection_interval
+                FROM steam_game_activity
+                WHERE timestamp >= ?
+                ORDER BY timestamp ASC
+                """,
+                (start_time,),
+            )
+        elif end_time is not None:
+            cursor.execute(
+                """
+                SELECT timestamp, steam_id, game_name, collection_interval
+                FROM steam_game_activity
+                WHERE timestamp <= ?
+                ORDER BY timestamp ASC
+                """,
+                (end_time,),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT timestamp, steam_id, game_name, collection_interval
+                FROM steam_game_activity
+                ORDER BY timestamp ASC
+                """
+            )
+
+        result = cursor.fetchall()
+        connection.close()
+        return result
 
 def seconds_to_human_readable(total_seconds: int):
     """
