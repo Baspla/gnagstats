@@ -363,162 +363,6 @@ def create_app(database: Database):
         daily_peak = tmp.groupby("date")["total_users"].max().reset_index()
         return daily_peak.sort_values("date")
 
-    def _build_voice_user_network(df: pd.DataFrame, min_shared_hours: float = 0.5):
-        """Erzeuge Netzwerk nutzerbasierter Voice-Co-Präsenz.
-
-        - Knoten: Nutzer, Knotengröße = gesamte Voice-Zeit (Stunden)
-        - Kante: gemeinsam im selben Channel während eines Snapshots; Kantenstärke = gemeinsame Stunden
-        - Filter: nur Kanten mit gemeinsamer Zeit >= min_shared_hours
-        - Farben: eindeutige Farbe pro Nutzer
-        """
-        import json, re
-        import networkx as nx
-        import plotly.graph_objects as go
-        import plotly.express as px
-        from itertools import combinations
-
-        if df.empty or "tracked_users" not in df.columns:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                margin=dict(l=0, r=0, t=0, b=0),
-                annotations=[dict(text="Keine Sprachdaten", showarrow=False)]
-            ))
-
-        tmp = df.copy()
-        if "minutes_per_snapshot" not in tmp.columns:
-            if "collection_interval" in tmp.columns:
-                tmp["minutes_per_snapshot"] = (tmp["collection_interval"].fillna(300) / 60.0).astype(float)
-            else:
-                tmp["minutes_per_snapshot"] = 5.0
-        minutes_default = float(tmp["minutes_per_snapshot"].median() if not tmp["minutes_per_snapshot"].isna().all() else 5.0)
-
-        # ID -> Anzeigename
-        json_cfg = load_json_data(JSON_DATA_PATH)
-        id_map = get_discord_id_to_name_map(json_cfg) if isinstance(json_cfg, dict) else {}
-
-        def parse_users(val):
-            if val is None or (isinstance(val, float) and pd.isna(val)):
-                return []
-            if isinstance(val, list):
-                return [str(v) for v in val]
-            if isinstance(val, str):
-                # Versuch JSON
-                try:
-                    maybe = json.loads(val)
-                    if isinstance(maybe, list):
-                        return [str(v) for v in maybe]
-                except Exception:
-                    pass
-                parts = [p.strip() for p in re.split(r'[;,\s]+', val) if p.strip()]
-                return [str(p) for p in parts]
-            return [str(val)]
-
-        edge_minutes = {}
-        user_minutes = {}
-        for _, row in tmp.iterrows():
-            users = parse_users(row.get("tracked_users"))
-            if not users:
-                continue
-            try:
-                mps = float(row.get("minutes_per_snapshot", minutes_default))
-                if not (mps > 0):
-                    mps = minutes_default
-            except Exception:
-                mps = minutes_default
-            for u in users:
-                user_minutes[u] = user_minutes.get(u, 0.0) + mps
-            if len(users) > 1:
-                for a, b in combinations(sorted(set(users)), 2):
-                    edge_minutes[(a, b)] = edge_minutes.get((a, b), 0.0) + mps
-
-        if not edge_minutes:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                margin=dict(l=0, r=0, t=0, b=0),
-                annotations=[dict(text="Keine gemeinsamen Zeiten", showarrow=False)]
-            ))
-
-        edge_hours = {k: v / 60.0 for k, v in edge_minutes.items() if (v / 60.0) >= float(min_shared_hours)}
-        if not edge_hours:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                margin=dict(l=0, r=0, t=0, b=0),
-                annotations=[dict(text="Keine Kanten nach Filter", showarrow=False)]
-            ))
-
-        node_hours = {u: (m / 60.0) for u, m in user_minutes.items()}
-
-        G = nx.Graph()
-        for (a, b), h in edge_hours.items():
-            G.add_edge(a, b, weight=h)
-        for u, h in node_hours.items():
-            if u not in G:
-                G.add_node(u)
-            G.nodes[u]["hours"] = h
-            G.nodes[u]["label"] = id_map.get(u, u)
-
-        if G.number_of_nodes() == 0:
-            return go.Figure()
-
-        pos = nx.spring_layout(G, weight="weight", seed=42, iterations=200, k=None)
-
-        palette = (
-            px.colors.qualitative.Plotly + px.colors.qualitative.D3 +
-            px.colors.qualitative.G10 + px.colors.qualitative.T10
-        )
-        nodes_sorted = sorted(G.nodes())
-        color_map = {u: palette[i % len(palette)] for i, u in enumerate(nodes_sorted)}
-
-        # Nodes
-        node_x, node_y, node_sizes, node_colors, node_text = [], [], [], [], []
-        h_vals = [G.nodes[n].get("hours", 0.0) for n in G.nodes()]
-        h_min = min(h_vals) if h_vals else 0.0
-        h_max = max(h_vals) if h_vals else 1.0
-        size_min, size_max = 14, 46
-        for n in nodes_sorted:
-            x, y = pos[n]
-            node_x.append(x); node_y.append(y)
-            h = float(G.nodes[n].get("hours", 0.0))
-            if h_max > h_min:
-                size = size_min + (size_max - size_min) * ((h - h_min) / (h_max - h_min))
-            else:
-                size = (size_min + size_max) / 2
-            node_sizes.append(size)
-            node_colors.append(color_map[n])
-            node_text.append(f"{G.nodes[n].get('label', n)}<br>{h:.1f} h Voice")
-
-        import plotly.graph_objects as go
-        node_trace = go.Scatter(
-            x=node_x, y=node_y, mode="markers", hoverinfo="text", text=node_text,
-            marker=dict(size=node_sizes, color=node_colors, line=dict(width=1, color="#222")), showlegend=False,
-        )
-
-        # Edges
-        edge_traces = []
-        weights = [d.get("weight", 0.0) for _, _, d in G.edges(data=True)]
-        w_max = max(weights) if weights else 1.0
-        for u, v, d in G.edges(data=True):
-            w = float(d.get("weight", 0.0))
-            width = 0.8 + 7.2 * (w / w_max) if w_max > 0 else 4.0
-            x0, y0 = pos[u]; x1, y1 = pos[v]
-            hover = f"{G.nodes[u].get('label', u)} — {G.nodes[v].get('label', v)}<br>{w:.2f} h gemeinsam"
-            edge_traces.append(
-                go.Scatter(
-                    x=[x0, x1], y=[y0, y1], mode="lines",
-                    line=dict(width=width, color="#888"), opacity=0.55,
-                    hoverinfo="text", text=[hover, hover], hovertemplate="%{text}<extra></extra>",
-                    showlegend=False,
-                )
-            )
-
-        fig = go.Figure(data=[*edge_traces, node_trace])
-        fig.update_layout(
-            margin=dict(l=10, r=10, t=30, b=10),
-            xaxis=dict(visible=False), yaxis=dict(visible=False),
-            title=dict(text="Voice User Netzwerk", x=0.5, y=0.97, font=dict(size=18)),
-            hovermode="closest",
-        )
-        return fig
 
     # Build figures once at load time (no auto-refresh)
     df_steam_game_activity_initial = _load_df_steam_game_activity(force=True)
@@ -614,8 +458,6 @@ def create_app(database: Database):
         ] if top_games_initial else df_steam_game_activity_initial
     )
     fig_network = _build_user_game_network(network_df_initial, min_game_hours=0.0)
-    # 7) Voice User Netzwerk (initial)
-    fig_voice_user_network = _build_voice_user_network(df_discord_voice_channels_initial, min_shared_hours=0.5)
 
     app.layout = html.Div(
         [
@@ -640,11 +482,11 @@ def create_app(database: Database):
                                     html.Label("Top-N Spiele:"),
                                     dcc.Slider(
                                         id="top-n-games-slider",
-                                        min=5,
-                                        max=80,
+                                        min=3,
+                                        max=40,
                                         step=1,
                                         value=default_top_n_games,
-                                        marks={5: "5", 10: "10", 20: "20", 40: "40", 60: "60", 80: "80"},
+                                        marks={3:"3", 5: "5", 10: "10", 20: "20", 30: "30", 40: "40"},
                                         tooltip={"placement": "bottom", "always_visible": False},
                                     ),
                                 ],
@@ -809,22 +651,6 @@ def create_app(database: Database):
                 ],
                 style={"marginBottom": "2em"},
             ),
-            html.Div(
-                [
-                    html.H2("Voice User Netzwerk", id="hdr-voice-user-network"),
-                    dcc.Graph(
-                        id="graph-voice-user-network",
-                        figure=fig_voice_user_network,
-                        config={
-                            "displaylogo": False,
-                            "scrollZoom": False,
-                            "displayModeBar": True,
-                        },
-                        style={"height": "700px"},
-                    ),
-                ],
-                style={"marginBottom": "2em"},
-            ),
         ],
         style={"fontFamily": "Arial, sans-serif", "margin": "2em"},
     )
@@ -839,7 +665,6 @@ def create_app(database: Database):
             Output("graph-by-hour", "figure"),
             Output("graph-voice-users-over-time", "figure"),
             Output("graph-user-game-network", "figure"),
-            Output("graph-voice-user-network", "figure"),
         ],
         [Input("date-range", "start_date"), Input("date-range", "end_date"), Input("top-n-games-slider", "value")],
     )
@@ -936,7 +761,6 @@ def create_app(database: Database):
         # Netzwerk (verwende Steam Game Activity DataFrame – gleiche Filter)
         network_df = df_steam_top
         fig_network_f = _build_user_game_network(network_df, min_game_hours=0.0)
-        fig_voice_user_network_f = _build_voice_user_network(df_voice_channels_f, min_shared_hours=0.5)
 
         return [
             fig_bar_f,
@@ -946,7 +770,6 @@ def create_app(database: Database):
             fig_hour_f,
             fig_voice_users_f,
             fig_network_f,
-            fig_voice_user_network_f,
         ]
 
     return app
