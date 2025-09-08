@@ -697,7 +697,7 @@ def create_app(database: Database):
         )
         # Y-Achse alphabetisch (px.timeline kehrt standardmäßig um -> wir setzen explizit)
         users_sorted = sorted(sess_df["user_name"].unique())
-        fig.update_yaxes(categoryorder="array", categoryarray=users_sorted, autorange="reversed")
+        fig.update_yaxes(categoryorder="array", categoryarray=users_sorted, autorange="reversed", fixedrange=True)
         # X-Achse Bereich & Format
         fig.update_xaxes(range=[cutoff_dt, now_dt], tickformat="%H:%M", title_text="Zeit (UTC, letzte 24h)")
         fig.update_yaxes(title_text="User")
