@@ -92,6 +92,16 @@ def get_user_data(data: Dict[str, Any]) -> List[Dict[str, str]]:
     logging.debug(f"Extracted user data: {user_data}")
     return user_data
 
+def get_steam_id_to_name_map(data: Dict[str, Any]) -> Dict[str, str]:
+    """Return a mapping from steamId (as string) to human-readable name from the JSON people list."""
+    people = data.get("people", [])
+    mapping: Dict[str, str] = {}
+    for person in people:
+        if "steamId" in person and "name" in person:
+            mapping[str(person["steamId"])] = person["name"]
+    logging.debug(f"Built steam_id->name map with {len(mapping)} entries")
+    return mapping
+
 def get_data():
     """
     Get all data from the JSON file.
@@ -104,5 +114,5 @@ def get_data():
         "user_steam_ids": get_user_steam_ids(json_data),
         "user_discord_ids": get_user_discord_ids(json_data),
         "user_birthdays": get_user_birthdays(json_data),
-        "user_data": get_user_data(json_data)
+    "user_data": get_user_data(json_data)
     }

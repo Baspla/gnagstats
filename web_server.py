@@ -6,6 +6,7 @@ from typing import Optional
 import pandas as pd
 
 from db import Database
+from json_data import load_json_data, get_steam_id_to_name_map
 
 
 def create_app(database: Database):
@@ -73,7 +74,20 @@ def create_app(database: Database):
             cubed.groupby("game_name")["hours"].sum().sort_values(ascending=False).head(top_games).index
         )
         filtered = cubed[cubed["steam_id"].isin(top_users_idx) & cubed["game_name"].isin(top_games_idx)]
-        pivot = filtered.pivot_table(index="steam_id", columns="game_name", values="hours", fill_value=0.0)
+
+        # Map steam_id to display name from JSON
+        try:
+            json_data = load_json_data(None)  # load via default path in loader
+        except TypeError:
+            # Fallback to explicit path when load_json_data requires it
+            json_data = load_json_data(getattr(__import__('config'), 'JSON_DATA_PATH', 'data.json'))
+        id_map = get_steam_id_to_name_map(json_data) if isinstance(json_data, dict) else {}
+        if id_map:
+            filtered = filtered.copy()
+            filtered["user_name"] = filtered["steam_id"].astype(str).map(id_map).fillna(filtered["steam_id"].astype(str))
+            pivot = filtered.pivot_table(index="user_name", columns="game_name", values="hours", fill_value=0.0)
+        else:
+            pivot = filtered.pivot_table(index="steam_id", columns="game_name", values="hours", fill_value=0.0)
         return pivot
 
     def _agg_hours_by_hour_of_day(df: pd.DataFrame) -> pd.DataFrame:
