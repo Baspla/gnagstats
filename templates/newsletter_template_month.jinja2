@@ -21,7 +21,7 @@ Es wurden keine Spiele besonders häufig gespielt. 💤
 {% else %}
 Die meistgespielten Spiele diesen Monat:
 {% for game in steam_most_played_list_capped %}
-- {{ game[0] }} - {{ game[1]|seconds_to_human_readable }}
+- {{ game[0] }} - {{ game[2]|seconds_to_human_readable }}
 {% endfor %}
 {% endif %}
 

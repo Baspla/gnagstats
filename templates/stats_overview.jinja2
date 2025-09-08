@@ -32,9 +32,9 @@
         <h2>Aktivste Discord-Voice-Channels (letzte 7 Tage)</h2>
         {% if discord_busiest_channels %}
         <table>
-            <tr><th>Channel</th><th>Gesamte Nutzer</th></tr>
-            {% for name, count in discord_busiest_channels %}
-            <tr><td>{{ name }}</td><td>{{ count }}</td></tr>
+            <tr><th>Channel</th><th>Gesamte Zeit</th></tr>
+            {% for name, time in discord_busiest_channels %}
+            <tr><td>{{ name }}</td><td>{{ time|seconds_to_human_readable }}</td></tr>
             {% endfor %}
         </table>
         {% else %}<p>Keine Daten.</p>{% endif %}
