@@ -33,7 +33,15 @@ class DataCollector:
                             self.db.insert_discord_voice_activity(timestamp,str(member.id), channel.name, str(guild.id))
                             if member.activity:
                                 logging.info(f"User {member.name} is playing {member.activity}")
-                                logging.info(f"Activity details: {member.activity.name}, {member.activity.type}, {member.activity.state}, {member.activity.application_id}")
+                                activity_attrs = [
+                                    "name", "type", "state", "application_id", "details", "url", "start", "end", "game","flags","party","platform"
+                                ]
+                                for attr in activity_attrs:
+                                    try:
+                                        value = getattr(member.activity, attr, None)
+                                        logging.info(f"Activity attribute '{attr}': {value}")
+                                    except Exception as e:
+                                        logging.error(f"Error getting activity attribute '{attr}': {e}")
                                 self.db.insert_discord_game_activity(timestamp,str(member.id), str(member.activity))
                     if user_count > 0:
                         self.db.insert_discord_voice_channel(timestamp,

@@ -363,6 +363,179 @@ def create_app(database: Database):
         daily_peak = tmp.groupby("date")["total_users"].max().reset_index()
         return daily_peak.sort_values("date")
 
+    def _build_voice_user_network(
+        df: pd.DataFrame,
+        min_shared_hours: float = 0.0,
+        min_node_size: int = 15,
+        max_node_size: int = 60,
+        min_edge_width: float = 0.5,
+        max_edge_width: float = 8.0,
+        layout_k: float = 0.6,
+        layout_iterations: int = 200,
+        layout_seed: int = 42,
+    ):
+        """Erzeugt ein interaktives Netzwerk der Discord Voice Beziehungen.
+
+        - Kanten-Gewicht = gemeinsame Voice-Stunden (Users gleichzeitig im selben Channel / Snapshot)
+        - Node-Größe = gesamte Voice-Stunden des Users
+        - Unterschiedliche Farbe je User
+        """
+        import plotly.graph_objects as go
+        import networkx as nx
+        from itertools import combinations
+        from collections import Counter
+        import plotly.express as px
+
+        if df.empty or df["user_name"].nunique() < 2:
+            return go.Figure(layout=dict(
+                xaxis=dict(visible=False), yaxis=dict(visible=False),
+                margin=dict(l=0, r=0, t=30, b=0),
+                title="Discord Voice User Network (keine Daten)"
+            ))
+
+        tmp = df.copy()
+        if "timestamp_dt" not in tmp.columns:
+            return go.Figure(layout=dict(
+                xaxis=dict(visible=False), yaxis=dict(visible=False),
+                margin=dict(l=0, r=0, t=30, b=0),
+                title="Discord Voice User Network (Fehlende timestamp_dt)"
+            ))
+
+        # Sicherstellen minutes_per_snapshot existiert
+        if "minutes_per_snapshot" not in tmp.columns or tmp["minutes_per_snapshot"].isna().all():
+            tmp["minutes_per_snapshot"] = 5.0
+
+        pair_minutes = Counter()
+        # Gruppiere nach Zeitstempel & Channel
+        for (_, _channel), group in tmp.groupby(["timestamp_dt", "channel_name"], sort=False):
+            users = sorted(group["user_name"].dropna().unique().tolist())
+            if len(users) < 2:
+                continue
+            minutes_slot = float(group["minutes_per_snapshot"].median())
+            for u1, u2 in combinations(users, 2):
+                if u1 == u2:
+                    continue
+                key = tuple(sorted((u1, u2)))
+                pair_minutes[key] += minutes_slot
+
+        if not pair_minutes:
+            return go.Figure(layout=dict(
+                xaxis=dict(visible=False), yaxis=dict(visible=False),
+                margin=dict(l=0, r=0, t=30, b=0),
+                title="Discord Voice User Network (keine gemeinsamen Zeiten)"
+            ))
+
+        # DataFrame aus Paaren
+        data_rows = []
+        for (u1, u2), minutes in pair_minutes.items():
+            hours = minutes / 60.0
+            if hours >= float(min_shared_hours):
+                data_rows.append({"user1": u1, "user2": u2, "shared_minutes": minutes, "shared_hours": hours})
+        pair_df = pd.DataFrame(data_rows)
+        if pair_df.empty:
+            return go.Figure(layout=dict(
+                xaxis=dict(visible=False), yaxis=dict(visible=False),
+                margin=dict(l=0, r=0, t=30, b=0),
+                title=f"Discord Voice User Network (Filter: >= {min_shared_hours} h)"
+            ))
+
+        # Gesamtstunden pro User
+        user_minutes = tmp.groupby("user_name")["minutes_per_snapshot"].sum().rename("total_minutes")
+        user_hours = (user_minutes / 60.0).rename("total_hours")
+        user_hours_df = user_hours.reset_index()
+        user_hours_map = dict(zip(user_hours_df["user_name"], user_hours_df["total_hours"]))
+
+        # Graph aufbauen
+        G = nx.Graph()
+        for user, hours in user_hours_map.items():
+            G.add_node(user, total_hours=float(hours))
+        for _, row in pair_df.iterrows():
+            G.add_edge(row["user1"], row["user2"], weight=float(row["shared_hours"]))
+
+        if G.number_of_edges() == 0:
+            return go.Figure(layout=dict(
+                xaxis=dict(visible=False), yaxis=dict(visible=False),
+                margin=dict(l=0, r=0, t=30, b=0),
+                title="Discord Voice User Network (keine Kanten)"
+            ))
+
+        pos = nx.spring_layout(G, k=layout_k, iterations=layout_iterations, seed=layout_seed, weight="weight")
+
+        # Node Größen skalieren
+        hours_vals = [float(G.nodes[n].get("total_hours", 0.0)) for n in G.nodes()]
+        h_min = min(hours_vals) if hours_vals else 0.0
+        h_max = max(hours_vals) if hours_vals else 1.0
+        def _scale(h: float):
+            if h_max > h_min:
+                return min_node_size + (max_node_size - min_node_size) * ((h - h_min) / (h_max - h_min))
+            return (min_node_size + max_node_size) / 2.0
+        node_sizes = [_scale(float(G.nodes[n].get("total_hours", 0.0))) for n in G.nodes()]
+
+        # Farben pro User
+        users = list(G.nodes())
+        palette = px.colors.qualitative.Dark24 + px.colors.qualitative.Light24 + px.colors.qualitative.Plotly
+        # Falls mehr User als Palette, wiederholen
+        colors = [palette[i % len(palette)] for i in range(len(users))]
+        color_map = {u: c for u, c in zip(users, colors)}
+
+        # Kantenbreiten skalieren
+        edge_weights = [float(d.get("weight", 0.0)) for _, _, d in G.edges(data=True)]
+        ew_min = min(edge_weights) if edge_weights else 0.0
+        ew_max = max(edge_weights) if edge_weights else 1.0
+        def _edge_scale(w: float):
+            if ew_max > ew_min:
+                return min_edge_width + (max_edge_width - min_edge_width) * ((w - ew_min) / (ew_max - ew_min))
+            return (min_edge_width + max_edge_width) / 2.0
+
+        edge_traces = []
+        for u, v, d in G.edges(data=True):
+            w = float(d.get("weight", 0.0))
+            width = _edge_scale(w)
+            x0, y0 = pos[u]
+            x1, y1 = pos[v]
+            edge_traces.append(
+                go.Scatter(
+                    x=[x0, x1], y=[y0, y1], mode="lines",
+                    line=dict(width=width, color="rgba(120,120,120,0.5)"),
+                    hoverinfo="text",
+                    text=[f"{u} – {v}<br>Gemeinsame Voice-Stunden: {w:.2f}", f"{u} – {v}<br>Gemeinsame Voice-Stunden: {w:.2f}"],
+                    hovertemplate="%{text}<extra></extra>",
+                    showlegend=False,
+                )
+            )
+
+        node_x = [pos[u][0] for u in users]
+        node_y = [pos[u][1] for u in users]
+        node_hover = [f"{u}<br>Gesamt Voice-Stunden: {user_hours_map.get(u,0):.2f}" for u in users]
+        node_trace = go.Scatter(
+            x=node_x, y=node_y, mode="markers+text",
+            hoverinfo="text", hovertext=node_hover, text=users,
+            textposition="top center",
+            marker=dict(
+                size=node_sizes,
+                color=[color_map[u] for u in users],
+                line=dict(width=1.5, color="#1f1f1f"),
+            ),
+            showlegend=False,
+        )
+
+        fig = go.Figure(
+            data=[*edge_traces, node_trace],
+            layout=go.Layout(
+                title=(
+                    "Discord Voice User Network"\
+                    "<br><span style='font-size:12px'>Kantenbreite = gemeinsame Voice-Stunden, Node-Größe = gesamte Voice-Stunden</span>"
+                ),
+                title_x=0.5,
+                margin=dict(l=10, r=10, t=60, b=10),
+                hovermode="closest",
+                showlegend=False,
+                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            ),
+        )
+        return fig
+
 
     # Build figures once at load time (no auto-refresh)
     df_steam_game_activity_initial = _load_df_steam_game_activity(force=True)
@@ -651,6 +824,22 @@ def create_app(database: Database):
                 ],
                 style={"marginBottom": "2em"},
             ),
+            html.Div(
+                [
+                    html.H2("Discord Voice Nutzer Netzwerk", id="hdr-voice-user-network"),
+                    dcc.Graph(
+                        id="graph-voice-user-network",
+                        figure=_build_voice_user_network(df_discord_voice_activity_initial),
+                        config={
+                            "displaylogo": False,
+                            "scrollZoom": False,
+                            "displayModeBar": True,
+                        },
+                        style={"height": "700px"},
+                    ),
+                ],
+                style={"marginBottom": "2em"},
+            ),
         ],
         style={"fontFamily": "Arial, sans-serif", "margin": "2em"},
     )
@@ -665,6 +854,7 @@ def create_app(database: Database):
             Output("graph-by-hour", "figure"),
             Output("graph-voice-users-over-time", "figure"),
             Output("graph-user-game-network", "figure"),
+            Output("graph-voice-user-network", "figure"),
         ],
         [Input("date-range", "start_date"), Input("date-range", "end_date"), Input("top-n-games-slider", "value")],
     )
@@ -675,6 +865,7 @@ def create_app(database: Database):
         # Laden (ggf. Cache)
         df_steam = _load_df_steam_game_activity()
         df_voice_channels = _load_df_discord_voice_channels()
+        df_voice_activity = _load_df_discord_voice_activity()
 
         # Filterfunktion
         def _filter(df: pd.DataFrame):
@@ -761,6 +952,9 @@ def create_app(database: Database):
         # Netzwerk (verwende Steam Game Activity DataFrame – gleiche Filter)
         network_df = df_steam_top
         fig_network_f = _build_user_game_network(network_df, min_game_hours=0.0)
+        # Voice User Netzwerk
+        df_voice_activity_f = _filter(df_voice_activity)
+        fig_voice_user_network_f = _build_voice_user_network(df_voice_activity_f)
 
         return [
             fig_bar_f,
@@ -770,6 +964,7 @@ def create_app(database: Database):
             fig_hour_f,
             fig_voice_users_f,
             fig_network_f,
+            fig_voice_user_network_f,
         ]
 
     return app
