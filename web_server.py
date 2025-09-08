@@ -208,134 +208,6 @@ def create_app(database: Database):
         daily_peak = tmp.groupby("date")["total_users"].max().reset_index()
         return daily_peak.sort_values("date")
 
-    def _build_user_game_network(df: pd.DataFrame):
-        """Erstelle eine einfache bipartite Netzwerkgrafik (User <-> Games).
-
-        - Kantenbreite ~ gespielte Stunden je (User, Game)
-        - Spiel-Knotengröße ~ Gesamtstunden über alle User
-        - User-Knoten haben fixe Größe
-        """
-        import plotly.graph_objects as go
-
-        if df.empty:
-            fig = go.Figure()
-            fig.update_layout(
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
-                annotations=[
-                    dict(text="Keine Daten", x=0.5, y=0.5, showarrow=False)
-                ],
-                margin=dict(l=20, r=20, t=20, b=20),
-                height=700,
-            )
-            return fig
-
-        # Aggregiere Spielzeit pro (User, Game)
-        grouped = df.groupby(["user_name", "game_name"]).size().reset_index(name="snapshots")
-        minutes_per_snapshot = float(df["minutes_per_snapshot"].median()) if "minutes_per_snapshot" in df.columns else 5.0
-        grouped["hours"] = (grouped["snapshots"] * minutes_per_snapshot) / 60.0
-
-        if grouped.empty:
-            fig = go.Figure()
-            fig.update_layout(
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
-                annotations=[
-                    dict(text="Keine Daten", x=0.5, y=0.5, showarrow=False)
-                ],
-                margin=dict(l=20, r=20, t=20, b=20),
-                height=700,
-            )
-            return fig
-
-        # Totale Stunden pro Game / User (für Sortierung & Knotengröße)
-        game_hours = grouped.groupby("game_name")["hours"].sum().sort_values(ascending=False)
-        user_hours = grouped.groupby("user_name")["hours"].sum().sort_values(ascending=False)
-
-        users = list(user_hours.index)
-        games = list(game_hours.index)
-
-        # Einfache bipartite Anordnung: User links (x=0.1), Games rechts (x=0.9)
-        def linspace_positions(n: int):
-            if n <= 0:
-                return []
-            if n == 1:
-                return [0.5]
-            return [i / (n - 1) for i in range(n)]
-
-        x_left, x_right = 0.1, 0.9
-        user_y = linspace_positions(len(users))
-        game_y = linspace_positions(len(games))
-        user_pos = {u: (x_left, user_y[i]) for i, u in enumerate(users)}
-        game_pos = {g: (x_right, game_y[i]) for i, g in enumerate(games)}
-
-        # Skalenfunktionen
-        def scale(value: float, vmin: float, vmax: float, out_min: float, out_max: float) -> float:
-            if vmax <= vmin:
-                return (out_min + out_max) / 2.0
-            ratio = (value - vmin) / (vmax - vmin)
-            return out_min + ratio * (out_max - out_min)
-
-        # Kanten als Shapes (ermöglicht individuelle Breiten pro Kante)
-        edge_shapes = []
-        max_edge_hours = float(grouped["hours"].max()) if not grouped["hours"].empty else 1.0
-        for row in grouped.itertuples(index=False):
-            u, g, _, hrs = row.user_name, row.game_name, row.snapshots, float(row.hours)
-            (x0, y0) = user_pos[u]
-            (x1, y1) = game_pos[g]
-            width = scale(hrs, 0.0, max_edge_hours, 0.5, 8.0)
-            edge_shapes.append(
-                dict(
-                    type="line",
-                    x0=x0,
-                    y0=y0,
-                    x1=x1,
-                    y1=y1,
-                    line=dict(width=width, color="rgba(130, 130, 130, 0.45)"),
-                )
-            )
-
-        # Knoten: User (fixe Größe) und Games (Größe ~ Stunden)
-        user_marker_size = 14
-        min_game_size, max_game_size = 12, 40
-        min_gh, max_gh = float(game_hours.min()), float(game_hours.max())
-        game_sizes = [
-            scale(float(game_hours[g]), min_gh, max_gh, min_game_size, max_game_size) for g in games
-        ]
-
-        import plotly.graph_objects as go  # reimport safe inside function scope
-
-        user_trace = go.Scatter(
-            x=[user_pos[u][0] for u in users],
-            y=[user_pos[u][1] for u in users],
-            mode="markers",
-            marker=dict(size=user_marker_size, color="#1f77b4"),
-            hoverinfo="text",
-            hovertext=[f"User: {u}\nGesamtstunden: {user_hours[u]:.1f}" for u in users],
-            name="Users",
-        )
-
-        game_trace = go.Scatter(
-            x=[game_pos[g][0] for g in games],
-            y=[game_pos[g][1] for g in games],
-            mode="markers",
-            marker=dict(size=game_sizes, color="#ff7f0e"),
-            hoverinfo="text",
-            hovertext=[f"Game: {g}\nGesamtstunden: {game_hours[g]:.1f}" for g in games],
-            name="Games",
-        )
-
-        fig = go.Figure(data=[user_trace, game_trace])
-        fig.update_layout(
-            showlegend=False,
-            shapes=edge_shapes,
-            xaxis=dict(visible=False, range=[0, 1]),
-            yaxis=dict(visible=False, range=[-0.02, 1.02]),
-            margin=dict(l=20, r=20, t=10, b=10),
-            height=800,
-        )
-        return fig
-
     # Build figures once at load time (no auto-refresh)
     df_steam_game_activity_initial = _load_df_steam_game_activity(force=True)
     # Preload other DataFrames as well
@@ -363,7 +235,7 @@ def create_app(database: Database):
     daily_no_gap = daily.copy()
     if not daily_no_gap.empty and "total_hours" in daily_no_gap.columns:
         daily_no_gap.loc[daily_no_gap["total_hours"] <= 0, "total_hours"] = None
-    fig_line = px.line(daily_no_gap, x="date", y="total_hours")
+    fig_line = px.bar(daily_no_gap, x="date", y="total_hours")
     fig_line.update_traces(connectgaps=False)
     # Nur horizontale Auswahl erlauben (Selection entlang X), vertikale Achse fix
     fig_line.update_layout(dragmode="select", selectdirection="h")
@@ -406,9 +278,6 @@ def create_app(database: Database):
     fig_voice_users.update_layout(dragmode="select", selectdirection="h")
     fig_voice_users.update_yaxes(fixedrange=True)
     fig_voice_users.update_layout(xaxis_title="Datum", yaxis_title="Peak Nutzer/Tag")
-
-    # 6) User-Game Netzwerk
-    fig_user_game_network = _build_user_game_network(df_steam_game_activity_initial)
 
     app.layout = html.Div(
         [
@@ -515,29 +384,6 @@ def create_app(database: Database):
                     dcc.Graph(
                         id="graph-voice-users-over-time",
                         figure=fig_voice_users,
-                        config={
-                            "displaylogo": False,
-                            "scrollZoom": False,
-                            "modeBarButtonsToRemove": [
-                                "zoom2d",
-                                "pan2d",
-                                "lasso2d",
-                                "zoomIn2d",
-                                "zoomOut2d",
-                                "autoScale2d",
-                                "resetScale2d",
-                            ],
-                        },
-                    ),
-                ],
-                style={"marginBottom": "2em"},
-            ),
-            html.Div(
-                [
-                    html.H2("User-Game Netzwerk", id="hdr-user-game-network"),
-                    dcc.Graph(
-                        id="graph-user-game-network",
-                        figure=fig_user_game_network,
                         config={
                             "displaylogo": False,
                             "scrollZoom": False,
