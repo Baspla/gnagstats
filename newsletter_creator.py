@@ -47,25 +47,62 @@ class NewsletterCreator:
         self.db = database
         pass
 
-    def gather_data(self,past_start:datetime, past_end:datetime, future_start:datetime, future_end:datetime):
+    def gather_data(self, past_start:datetime, past_end:datetime, future_start:datetime, future_end:datetime):
+        """
+        Sammelt alle relevanten Statistiken für den Newsletter-Zeitraum und berechnet die Veränderung zum Vorzeitraum.
+
+        Args:
+            past_start (datetime): Startzeitpunkt des betrachteten Zeitraums (Vergangenheit).
+            past_end (datetime): Endzeitpunkt des betrachteten Zeitraums (Vergangenheit).
+            future_start (datetime): Startzeitpunkt für zukünftige Events/Geburtstage.
+            future_end (datetime): Endzeitpunkt für zukünftige Events/Geburtstage.
+
+        Returns:
+            dict: Enthält alle Kennzahlen und Listen für den Newsletter, inkl. Veränderung zum Vorzeitraum.
+                - discord_time_alone: Gesamtzeit, die User alleine im Voice Channel verbracht haben (int)
+                - discord_time_alone_change_abs: absolute Veränderung zur Vorperiode (int)
+                - discord_time_alone_change_pct: prozentuale Veränderung zur Vorperiode (float)
+                - discord_time_voice: Gesamtzeit aller Voice-Aktivität (int)
+                - discord_time_voice_change_abs: absolute Veränderung zur Vorperiode (int)
+                - discord_time_voice_change_pct: prozentuale Veränderung zur Vorperiode (float)
+                - discord_users_voice: Anzahl einzigartiger User im Voice Channel (int)
+                - discord_users_voice_change_abs: absolute Veränderung zur Vorperiode (int)
+                - discord_users_voice_change_pct: prozentuale Veränderung zur Vorperiode (float)
+                - discord_busiest_channel: Name des meistbesuchten Voice Channels (str)
+                - steam_most_played: Name des meistgespielten Steam-Spiels (str)
+                - steam_most_played_list: Liste der meistgespielten Steam-Spiele [(str, int)]
+                - steam_most_played_list_change_abs: absolute Veränderung der Spielstunden zur Vorperiode (int)
+                - steam_most_played_list_change_pct: prozentuale Veränderung der Spielstunden zur Vorperiode (float)
+                - steam_most_played_together: Name des meistgespielten Spiels mit mehreren Spielern (str)
+                - steam_most_played_together_list: Liste der meistgespielten Spiele mit mehreren Spielern [(str, int)]
+                - steam_most_played_together_list_change_abs: absolute Veränderung der Spielstunden mit mehreren Spielern (int)
+                - steam_most_played_together_list_change_pct: prozentuale Veränderung der Spielstunden mit mehreren Spielern (float)
+                - steam_most_concurrent_players: Name des Spiels mit den meisten gleichzeitigen Spielern (str)
+                - steam_most_concurrent_list: Liste der Spiele mit den meisten gleichzeitigen Spielern [(str, int)]
+                - steam_most_concurrent_list_change_abs: absolute Veränderung der maximalen gleichzeitigen Spieler (int)
+                - steam_most_concurrent_list_change_pct: prozentuale Veränderung der maximalen gleichzeitigen Spieler (float)
+                - discord_busiest_channels_list: Liste der meistbesuchten Voice Channels [(str, int)]
+                - steam_most_played_list_capped: Top 5 meistgespielte Steam-Spiele
+                - steam_most_played_together_list_capped: Top 3 meistgespielte Spiele mit mehreren Spielern
+                - steam_most_concurrent_list_capped: Top 3 Spiele mit den meisten gleichzeitigen Spielern
+                - discord_active_events: Liste der aktiven Discord-Events
+                - discord_non_active_events: Liste der nicht aktiven Discord-Events im Zeitraum
+                - birthdays: Liste der bevorstehenden Geburtstage
+        """
+        # Aktueller Zeitraum
         int_lone_time = self.db.get_discord_total_lonely_voice_activity(past_start, past_end)[0]
-
         int_voice_time = self.db.get_discord_total_voice_activity(past_start, past_end)[0]
-
         unique_voice = self.db.get_discord_unique_active_users(past_start, past_end)[0]
         if unique_voice is None:
             unique_voice = 0
-
         busiest_channels = self.db.get_discord_busiest_voice_channels(past_start, past_end)
         busiest_channel = busiest_channels[0][0] if busiest_channels else None
-
         most_played_list = self.db.get_steam_most_played_games(past_start, past_end)
         most_played_together_list = self.db.get_steam_most_played_together(past_start, past_end)
         most_concurrent_list = self.db.get_steam_most_concurrent_players(past_start, past_end)
         most_played_list_capped = most_played_list[:5] if most_played_list else None
         most_played_together_list_capped = most_played_together_list[:3] if most_played_together_list else None
         most_concurrent_list_capped = most_concurrent_list[:3] if most_concurrent_list else None
-
         most_played = most_played_list[0][0] if most_played_list else None
         most_played_together = most_played_together_list[0][0] if most_played_together_list else None
         most_concurrent = most_concurrent_list[0][0] if most_concurrent_list else None
@@ -73,24 +110,74 @@ class NewsletterCreator:
         non_active_events = self.current_event_fetcher.get_non_active_guild_events_starting_until(future_end, future_start)
         birthdays = self.current_event_fetcher.get_birthdays_until(future_start,future_end)
 
+        # Vorzeitraum berechnen
+        period_length = (past_end - past_start)
+        prev_start = past_start - period_length
+        prev_end = past_start
+        prev_lone_time = self.db.get_discord_total_lonely_voice_activity(prev_start, prev_end)[0]
+        prev_voice_time = self.db.get_discord_total_voice_activity(prev_start, prev_end)[0]
+        prev_unique_voice = self.db.get_discord_unique_active_users(prev_start, prev_end)[0]
+        if prev_unique_voice is None:
+            prev_unique_voice = 0
+        prev_most_played_list = self.db.get_steam_most_played_games(prev_start, prev_end)
+        prev_most_played_together_list = self.db.get_steam_most_played_together(prev_start, prev_end)
+        prev_most_concurrent_list = self.db.get_steam_most_concurrent_players(prev_start, prev_end)
+
+        # Hilfsfunktionen für Prozent und Absolut
+        def calc_change(current, previous):
+            abs_change = current - previous
+            pct_change = ((current - previous) / previous * 100) if previous else 0
+            return abs_change, pct_change
+
+        # Summen für Listen berechnen
+        def sum_list(lst):
+            if not lst:
+                return 0
+            return sum([x[1] for x in lst if len(x) > 1 and isinstance(x[1], (int, float))])
+
+        lone_abs, lone_pct = calc_change(int_lone_time or 0, prev_lone_time or 0)
+        voice_abs, voice_pct = calc_change(int_voice_time or 0, prev_voice_time or 0)
+        unique_abs, unique_pct = calc_change(unique_voice or 0, prev_unique_voice or 0)
+        played_sum = sum_list(most_played_list)
+        prev_played_sum = sum_list(prev_most_played_list)
+        played_abs, played_pct = calc_change(played_sum, prev_played_sum)
+        played_together_sum = sum_list(most_played_together_list)
+        prev_played_together_sum = sum_list(prev_most_played_together_list)
+        played_together_abs, played_together_pct = calc_change(played_together_sum, prev_played_together_sum)
+        concurrent_sum = sum_list(most_concurrent_list)
+        prev_concurrent_sum = sum_list(prev_most_concurrent_list)
+        concurrent_abs, concurrent_pct = calc_change(concurrent_sum, prev_concurrent_sum)
+
         data = {
-            "discord_time_alone": int_lone_time, # Wie lange war jemand alleine in einem Voice Channel
-            "discord_time_voice": int_voice_time, # Wie lange waren alle in einem Voice Channel kumuliert
-            "discord_users_voice": unique_voice, # Wie viele einzigartige User waren in einem Voice Channel
-            "discord_busiest_channel": busiest_channel, # Welcher Channel war am meisten besucht
-            "steam_most_played": most_played, # Welches Spiel wurde am meisten gespielt
-            "steam_most_played_together": most_played_together, # Welches Spiel wurde am meisten mit zwei oder mehr Leuten gespielt
-            "steam_most_concurrent_players": most_concurrent, # Welches Spiel hatte die meisten Spieler gleichzeitig
-            "steam_most_played_list": most_played_list, # Liste der Spiele mit den meisten Spielstunden
-            "steam_most_played_together_list": most_played_together_list, # Liste der Spiele mit den meisten Spielstunden mit zwei oder mehr Leuten
-            "steam_most_concurrent_list": most_concurrent_list, # Liste der Spiele mit den meisten Spielern gleichzeitig
-            "discord_busiest_channels_list": busiest_channels, # Liste der Channels mit den meisten Besuchern
-            "steam_most_played_list_capped": most_played_list_capped, # Liste der Spiele mit den meisten Spielstunden (max 5)
-            "steam_most_played_together_list_capped": most_played_together_list_capped, # Liste der Spiele mit den meisten Spielstunden mit zwei oder mehr Leuten (max 3)
-            "steam_most_concurrent_list_capped": most_concurrent_list_capped, # Liste der Spiele mit den meisten Spielern gleichzeitig (max 3)
-            "discord_active_events": active_events, # Welche Discord Events sind aktiv
-            "discord_non_active_events": non_active_events, # Welche Discord Events sind nicht aktiv
-            "birthdays": birthdays # Welche Geburtstage stehen an
+            "discord_time_alone": int_lone_time,
+            "discord_time_alone_change_abs": lone_abs,
+            "discord_time_alone_change_pct": lone_pct,
+            "discord_time_voice": int_voice_time,
+            "discord_time_voice_change_abs": voice_abs,
+            "discord_time_voice_change_pct": voice_pct,
+            "discord_users_voice": unique_voice,
+            "discord_users_voice_change_abs": unique_abs,
+            "discord_users_voice_change_pct": unique_pct,
+            "discord_busiest_channel": busiest_channel,
+            "steam_most_played": most_played,
+            "steam_most_played_list": most_played_list,
+            "steam_most_played_list_change_abs": played_abs,
+            "steam_most_played_list_change_pct": played_pct,
+            "steam_most_played_together": most_played_together,
+            "steam_most_played_together_list": most_played_together_list,
+            "steam_most_played_together_list_change_abs": played_together_abs,
+            "steam_most_played_together_list_change_pct": played_together_pct,
+            "steam_most_concurrent_players": most_concurrent,
+            "steam_most_concurrent_list": most_concurrent_list,
+            "steam_most_concurrent_list_change_abs": concurrent_abs,
+            "steam_most_concurrent_list_change_pct": concurrent_pct,
+            "discord_busiest_channels_list": busiest_channels,
+            "steam_most_played_list_capped": most_played_list_capped,
+            "steam_most_played_together_list_capped": most_played_together_list_capped,
+            "steam_most_concurrent_list_capped": most_concurrent_list_capped,
+            "discord_active_events": active_events,
+            "discord_non_active_events": non_active_events,
+            "birthdays": birthdays
         }
         # birthdays are a list of dictionaries with keys "name" and "birthday" and "next_birthday"
         # discord events are a list of objects with parameters "name", "start_time", "end_time", "description"
