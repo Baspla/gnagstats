@@ -13,7 +13,7 @@ from waitress import serve
 
 def create_app(database: Database):
     """Create a Dash app with dedicated web queries and rich visualizations."""
-    from dash import Dash, html, dcc, Input, Output
+    from dash import Dash, html, dcc, Input, Output, dash_table
     import plotly.express as px
     import plotly.graph_objects as go
     import networkx as nx
@@ -699,7 +699,6 @@ def create_app(database: Database):
                                 style={
                                     "flex": "1",
                                     "minWidth": 0,
-                                    # Nur vertikal scrollen, um viele Labels zu handeln
                                     "height": "600px",
                                     "overflowY": "auto",
                                     "overflowX": "hidden",
@@ -762,28 +761,57 @@ def create_app(database: Database):
                 ],
                 style={"marginBottom": "2em"},
             ),
+            # Combined Div for Spielzeit nach Tagesstunde and Gerade gespielt
             html.Div(
                 [
-                    html.H2("Spielzeit nach Tagesstunde", id="hdr-by-hour"),
-                    dcc.Graph(
-                        id="graph-by-hour",
-                        figure=fig_hour,
-                        config={
-                            "displaylogo": False,
-                            "scrollZoom": False,
-                            "modeBarButtonsToRemove": [
-                                "zoom2d",
-                                "pan2d",
-                                "lasso2d",
-                                "zoomIn2d",
-                                "zoomOut2d",
-                                "autoScale2d",
-                                "resetScale2d",
-                            ],
-                        },
+                    html.Div(
+                        [
+                            html.H2("Spielzeit nach Tagesstunde", id="hdr-by-hour"),
+                            dcc.Graph(
+                                id="graph-by-hour",
+                                figure=fig_hour,
+                                config={
+                                    "displaylogo": False,
+                                    "scrollZoom": False,
+                                    "modeBarButtonsToRemove": [
+                                        "zoom2d",
+                                        "pan2d",
+                                        "lasso2d",
+                                        "zoomIn2d",
+                                        "zoomOut2d",
+                                        "autoScale2d",
+                                        "resetScale2d",
+                                    ],
+                                },
+                            ),
+                        ],
+                        style={"flex": "1", "minWidth": 0, "marginRight": "1rem"},
+                    ),
+                    html.Div(
+                        [
+                            html.H2("Gerade gespielt", id="hdr-recent-steam-games"),
+                            dcc.Interval(id="recent-games-interval", interval=300_000, n_intervals=0),  # alle 5 Minuten
+                            dash_table.DataTable(
+                                id="recent-steam-games-table",
+                                columns=[
+                                    {"name": "User", "id": "user_name"},
+                                    {"name": "Spiel", "id": "game_name"},
+                                    {"name": "Zuletzt gesehen", "id": "last_seen"},
+                                    {"name": "Minuten seit letztem Snapshot", "id": "minutes_ago"},
+                                ],
+                                data=[],  # Wird per Callback gefüllt
+                                style_table={"overflowX": "auto"},
+                                style_cell={"padding": "4px", "fontSize": "13px"},
+                                style_header={"fontWeight": "bold", "backgroundColor": "#f2f2f2"},
+                                sort_action="native",
+                                filter_action="native",
+                                page_size=30,
+                            ),
+                        ],
+                        style={"flex": "1", "minWidth": 0},
                     ),
                 ],
-                style={"marginBottom": "2em"},
+                style={"display": "flex", "gap": "1rem", "alignItems": "stretch", "marginBottom": "2em"},
             ),
             html.Div(
                 [
@@ -837,15 +865,6 @@ def create_app(database: Database):
                         },
                         style={"height": "700px"},
                     ),
-                ],
-                style={"marginBottom": "2em"},
-            ),
-            # Live-Abschnitt: Aktuell gespielte Steam-Spiele (letzte 5,5 Minuten)
-            dcc.Interval(id="interval-current-steam", interval=300_000, n_intervals=0),  # 5 Minuten
-            html.Div(
-                [
-                    html.H2("Currently Gaming", id="hdr-current-steam"),
-                    html.Div(id="div-current-steam-games", children="Lade ...")
                 ],
                 style={"marginBottom": "2em"},
             ),
@@ -976,63 +995,34 @@ def create_app(database: Database):
             fig_voice_user_network_f,
         ]
 
-    # Callback für Live-Anzeige aktuell gespielter Steam-Spiele (letzte 5,5 Minuten)
-    from dash import Input, Output
+    # Callback für die Tabelle der jüngsten Steam-Spielaktivität
     @app.callback(
-        Output("div-current-steam-games", "children"),
-        Input("interval-current-steam", "n_intervals"),
+        Output("recent-steam-games-table", "data"),
+        Input("recent-games-interval", "n_intervals"),
         prevent_initial_call=False,
     )
-    def _update_current_steam_games(_n):  # noqa: D401
-        now = int(time.time())
-        # Forciertes Reload um frische Daten für den Live-Bereich zu bekommen
-        df = _load_df_steam_game_activity(force=True)
-        if df.empty:
-            return "Keine Daten vorhanden."
-        # Fallback falls user_name Spalte fehlt
-        if "user_name" not in df.columns:
-            df["user_name"] = df["steam_id"].astype(str)
-        # Filter: letzte 5,5 Minuten (330s)
-        recent = df[df["timestamp"] >= now - 330]
+    def _update_recent_games(_n):  # noqa: D401
+        """Liefert Spielaktivität der letzten 5,5 Minuten (330s)."""
+        import time as _time
+        df_steam = _load_df_steam_game_activity()
+        if df_steam.empty:
+            return []
+        cutoff = _time.time() - 330  # 5,5 Minuten
+        recent = df_steam[df_steam["timestamp"] >= cutoff].copy()
         if recent.empty:
-            return "Niemand spielt (innerhalb der letzten 5,5 Minuten)."
-        # Neueste Einträge pro Nutzer (Spiel kann variieren)
-        recent_sorted = recent.sort_values("timestamp", ascending=False)
-        latest_per_user = recent_sorted.groupby("user_name", as_index=False).first()
-        latest_per_user["minutes_ago"] = (now - latest_per_user["timestamp"]) / 60.0
-
-        # Sortiere nach zuletzt gesehen
-        latest_per_user = latest_per_user.sort_values("minutes_ago")
-
-        # Baue einfache Tabelle
-        header = ["Nutzer", "Spiel", "Vor (Minuten)"]
-        import math
-        rows = []
-        for _, row in latest_per_user.iterrows():
-            minutes_ago = row["minutes_ago"]
-            # Rundung auf 1 Nachkommastelle, aber sehr kleine Werte auf <0.1
-            if minutes_ago < 0.1:
-                minutes_str = "<0.1"
-            else:
-                minutes_str = f"{minutes_ago:.1f}"
-            rows.append([str(row["user_name"]), str(row["game_name"]), minutes_str])
-
-        table = html.Table(
-            [
-                html.Thead(html.Tr([html.Th(col) for col in header])),
-                html.Tbody([
-                    html.Tr([html.Td(cell) for cell in r]) for r in rows
-                ])
-            ],
-            style={
-                "borderCollapse": "collapse",
-                "width": "100%",
-                "fontFamily": "monospace",
-            }
-        )
-        # Ein wenig Styling per CSS inline
-        # (Alternativ könnte man DataTable benutzen, aber hier ausreichend simpel)
-        return table
+            return []
+        # Neueste Zeile je User (steam_id) behalten
+        recent.sort_values("timestamp", ascending=False, inplace=True)
+        # Falls ein User gleichzeitig mehrere Activities hat (selten), pro steam_id erste nehmen
+        recent = recent.drop_duplicates(subset=["steam_id"], keep="first")
+        # Aufbereitete Felder
+        now_ts = _time.time()
+        recent["minutes_ago"] = ((now_ts - recent["timestamp"]) / 60).round(2)
+        # Format last_seen menschenlesbar
+        recent["last_seen"] = recent["timestamp_dt"].dt.strftime("%Y-%m-%d %H:%M:%S")
+        # Nur relevante Spalten
+        cols = ["user_name", "game_name", "last_seen", "minutes_ago"]
+        return recent[cols].to_dict("records")
 
     return app
 
