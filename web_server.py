@@ -707,8 +707,28 @@ def create_app(database: Database):
             hoverlabel=dict(bgcolor="white"),
             height=max(400, min(1200, 30 * len(users_sorted))),
         )
-        # Vertikale Linie für "Jetzt"
-        fig.add_vline(x=now_dt, line_dash="dot", line_color="red", annotation_text="Jetzt", annotation_position="top right")
+        # Vertikale Linie für "Jetzt" (Workaround statt add_vline wegen datetime Mischung)
+        fig.add_shape(
+            type="line",
+            x0=now_dt,
+            x1=now_dt,
+            y0=0,
+            y1=1,
+            xref="x",
+            yref="paper",
+            line=dict(color="red", width=2, dash="dot"),
+        )
+        fig.add_annotation(
+            x=now_dt,
+            y=1,
+            xref="x",
+            yref="paper",
+            showarrow=False,
+            text="Jetzt",
+            align="right",
+            yanchor="bottom",
+            font=dict(color="red"),
+        )
         return fig
 
 
