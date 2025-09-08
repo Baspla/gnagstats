@@ -13,7 +13,7 @@ from waitress import serve
 
 def create_app(database: Database):
     """Create a Dash app with dedicated web queries and rich visualizations."""
-    from dash import Dash, html, dcc, Input, Output
+    from dash import Dash, html, dcc, Input, Output, State
     from dash import dash_table
     import plotly.express as px
     import plotly.graph_objects as go
@@ -706,7 +706,11 @@ def create_app(database: Database):
             margin=dict(l=40, r=20, t=60, b=40),
             hoverlabel=dict(bgcolor="white"),
             height=max(400, min(1200, 30 * len(users_sorted))),
+            hovermode="closest",  # Hover überall im Balken (nicht nur an Enden)
         )
+        # Spikes für bessere Orientierung
+        fig.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor", spikethickness=1)
+    # Standard Hoverdaten (durch hover_data) genügen; keine customdata-Zuweisung nötig
         # Vertikale Linie für "Jetzt" (Workaround statt add_vline wegen datetime Mischung)
         fig.add_shape(
             type="line",
@@ -1118,12 +1122,71 @@ def create_app(database: Database):
                         },
                         style={"height": "600px"},
                     ),
+                    # Grenzen für 24h Range (min/max) für Zoom-Clamping
+                    dcc.Store(
+                        id="voice-24h-bounds",
+                        data={
+                            "min": fig_voice_24h_timeline_initial.layout.xaxis.range[0]
+                            if fig_voice_24h_timeline_initial.layout.get("xaxis", {}).get("range")
+                            else None,
+                            "max": fig_voice_24h_timeline_initial.layout.xaxis.range[1]
+                            if fig_voice_24h_timeline_initial.layout.get("xaxis", {}).get("range")
+                            else None,
+                        },
+                    ),
                 ],
                 style={"marginBottom": "2em"},
             ),
         ],
         style={"fontFamily": "Arial, sans-serif", "margin": "2em"},
     )
+
+    # Callback: Clamp Zoom der 24h-Timeline auf ursprüngliche 24h (kein hinauszoomen/pannen über Grenzen)
+    @app.callback(
+        Output("graph-voice-24h-timeline", "figure"),
+        Input("graph-voice-24h-timeline", "relayoutData"),
+        State("graph-voice-24h-timeline", "figure"),
+        State("voice-24h-bounds", "data"),
+        prevent_initial_call=True,
+    )
+    def _clamp_voice_timeline(relayout_data, current_fig, bounds):  # pragma: no cover - UI callback
+        import pandas as pd
+        if not relayout_data or not current_fig:
+            return current_fig
+        x_keys = [
+            k for k in relayout_data.keys() if k.startswith("xaxis.range[")
+        ]
+        if not x_keys:
+            # Andere Layout-Aktionen ignorieren
+            return current_fig
+        # Aktuelle gewünschte Range extrahieren
+        x0 = relayout_data.get("xaxis.range[0]")
+        x1 = relayout_data.get("xaxis.range[1]")
+        if x0 is None or x1 is None:
+            return current_fig
+        # Grenzen aus Store
+        b_min = bounds.get("min") if bounds else None
+        b_max = bounds.get("max") if bounds else None
+        if not b_min or not b_max:
+            return current_fig
+        try:
+            new_min = pd.to_datetime(x0)
+            new_max = pd.to_datetime(x1)
+            base_min = pd.to_datetime(b_min)
+            base_max = pd.to_datetime(b_max)
+        except Exception:  # Fallback
+            return current_fig
+        # Clamping
+        if new_min < base_min:
+            new_min = base_min
+        if new_max > base_max:
+            new_max = base_max
+        # Fenster darf nicht größer als Original werden
+        if (new_max - new_min) > (base_max - base_min):
+            new_min = base_min
+            new_max = base_max
+        current_fig["layout"]["xaxis"]["range"] = [new_min.isoformat(), new_max.isoformat()]
+        return current_fig
 
     # Callback zur Aktualisierung aller Diagramme anhand des gewählten Datumsbereichs
     @app.callback(
