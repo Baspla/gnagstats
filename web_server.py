@@ -6,8 +6,9 @@ from typing import Optional
 import pandas as pd
 
 from db import Database
-from json_data import load_json_data, get_steam_id_to_name_map
+from json_data import load_json_data, get_steam_id_to_name_map, get_discord_id_to_name_map
 from config import WEB_CACHE_TTL_MINUTES, JSON_DATA_PATH
+from waitress import serve
 
 
 def create_app(database: Database):
@@ -74,6 +75,13 @@ def create_app(database: Database):
         if not df.empty:
             df["timestamp_dt"] = pd.to_datetime(df["timestamp"], unit="s")
             df["minutes_per_snapshot"] = (df["collection_interval"].fillna(300) / 60).astype(float)
+            # Map discord_id to display name from JSON
+            json_data = load_json_data(JSON_DATA_PATH)
+            id_map = get_discord_id_to_name_map(json_data) if isinstance(json_data, dict) else {}
+            if id_map:
+                df["user_name"] = df["discord_id"].astype(str).map(id_map).fillna(df["discord_id"].astype(str))
+            else:
+                df["user_name"] = df["discord_id"].astype(str)
         df_discord_voice_activity_cache = df
         last_loaded_dva = now
         logging.debug(f"Loaded Discord voice activity DataFrame with {len(df)} rows.")
@@ -116,6 +124,13 @@ def create_app(database: Database):
         if not df.empty:
             df["timestamp_dt"] = pd.to_datetime(df["timestamp"], unit="s")
             df["minutes_per_snapshot"] = (df["collection_interval"].fillna(300) / 60).astype(float)
+            # Map discord_id to display name from JSON
+            json_data = load_json_data(JSON_DATA_PATH)
+            id_map = get_discord_id_to_name_map(json_data) if isinstance(json_data, dict) else {}
+            if id_map:
+                df["user_name"] = df["discord_id"].astype(str).map(id_map).fillna(df["discord_id"].astype(str))
+            else:
+                df["user_name"] = df["discord_id"].astype(str)
         df_discord_game_activity_cache = df
         last_loaded_dga = now
         logging.debug(f"Loaded Discord game activity DataFrame with {len(df)} rows.")
@@ -169,6 +184,20 @@ def create_app(database: Database):
         hourly["total_hours"] = hourly["total_minutes"] / 60.0
         return hourly.sort_values("hour_of_day")
 
+    def _agg_total_voice_users_over_time(df: pd.DataFrame) -> pd.DataFrame:
+        """Summe der Nutzer über alle Sprachkanäle je Zeitstempel."""
+        if df.empty:
+            return pd.DataFrame(columns=["timestamp_dt", "total_users"])        
+        tmp = df.copy()
+        # user_count kann float/NaN sein -> sicher in int konvertieren
+        tmp["user_count"] = pd.to_numeric(tmp["user_count"], errors="coerce").fillna(0).astype(int)
+        aggregated = (
+            tmp.groupby("timestamp_dt")["user_count"].sum()
+            .rename("total_users").to_frame().reset_index()
+            .sort_values("timestamp_dt")
+        )
+        return aggregated
+
     # Build figures once at load time (no auto-refresh)
     df_steam_game_activity_initial = _load_df_steam_game_activity(force=True)
     # Preload other DataFrames as well
@@ -180,6 +209,15 @@ def create_app(database: Database):
     per_game = _agg_playtime_per_game(df_steam_game_activity_initial)
     fig_bar = px.bar(per_game.head(40), x="total_hours_played", y="game_name", orientation="h", color="game_name")
     fig_bar.update_layout(showlegend=False, xaxis_title="Stunden", yaxis_title="Spiel")
+    # Dynamische Höhe für viele Kategorien, damit die Eltern-Div scrollen kann
+    try:
+        n_bars = int(min(len(per_game), 40)) if per_game is not None else 0
+    except Exception:
+        n_bars = 0
+    fig_bar.update_layout(height=max(500, min(2400, 34 * max(1, n_bars))))
+    # Pie: percentage per game (gleicher Datensatz wie Balken)
+    fig_pie = px.pie(per_game.head(40), values="total_hours_played", names="game_name")
+    fig_pie.update_layout(margin=dict(l=0, r=0, t=0, b=0))
 
     # 2) Line: total time per day
     daily = _agg_daily_hours(df_steam_game_activity_initial)
@@ -208,13 +246,37 @@ def create_app(database: Database):
     fig_hour = px.bar(by_hour, x="hour_of_day", y="total_hours")
     fig_hour.update_layout(xaxis_title="Stunde (0-23)", yaxis_title="Stunden")
 
+    # 5) Line: Gesamtanzahl Nutzer in Sprachkanälen über die Zeit
+    voice_users_over_time = _agg_total_voice_users_over_time(df_discord_voice_channels_initial)
+    fig_voice_users = px.line(voice_users_over_time, x="timestamp_dt", y="total_users")
+    fig_voice_users.update_layout(xaxis_title="Zeit", yaxis_title="Gesamtnutzer in Sprachkanälen")
+
     app.layout = html.Div(
         [
-            html.H1("GNAG Stats – Übersicht"),
+            html.H1("GNAG Stats", style={"textAlign": "center"}),
             html.Div(
                 [
                     html.H2("Spielzeit pro Spiel", id="hdr-playtime-per-game"),
-                    dcc.Graph(id="graph-playtime-per-game", figure=fig_bar),
+                    html.Div(
+                        [
+                            html.Div(
+                                dcc.Graph(id="graph-playtime-per-game", figure=fig_bar),
+                                style={
+                                    "flex": "1",
+                                    "minWidth": 0,
+                                    # Nur vertikal scrollen, um viele Labels zu handeln
+                                    "height": "600px",
+                                    "overflowY": "auto",
+                                    "overflowX": "hidden",
+                                },
+                            ),
+                            html.Div(
+                                dcc.Graph(id="graph-playtime-pie", figure=fig_pie),
+                                style={"flex": "1", "minWidth": 0},
+                            ),
+                        ],
+                        style={"display": "flex", "gap": "1rem", "alignItems": "stretch"},
+                    ),
                 ],
                 style={"marginBottom": "2em"},
             ),
@@ -239,6 +301,13 @@ def create_app(database: Database):
                 ],
                 style={"marginBottom": "2em"},
             ),
+            html.Div(
+                [
+                    html.H2("Gesamtnutzer in Sprachkanälen", id="hdr-voice-users-over-time"),
+                    dcc.Graph(id="graph-voice-users-over-time", figure=fig_voice_users),
+                ],
+                style={"marginBottom": "2em"},
+            ),
         ],
         style={"fontFamily": "Arial, sans-serif", "margin": "2em"},
     )
@@ -249,7 +318,6 @@ def create_app(database: Database):
 def run_webserver(database, host="127.0.0.1", port=5000):
     app = create_app(database)
     logging.info(f"Starting Dash web server at http://{host}:{port}/ using Waitress.")
-    from waitress import serve
     # Serve the underlying Flask server of the Dash app
     threading.Thread(
         target=serve,
