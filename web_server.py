@@ -15,6 +15,8 @@ def create_app(database: Database):
     """Create a Dash app with dedicated web queries and rich visualizations."""
     from dash import Dash, html, dcc
     import plotly.express as px
+    import plotly.graph_objects as go
+    import networkx as nx
 
     # Initialize Dash app (Flask server accessible via app.server)
     app = Dash(__name__, title="Gnag Stats")
@@ -184,6 +186,197 @@ def create_app(database: Database):
         hourly["total_hours"] = hourly["total_minutes"] / 60.0
         return hourly.sort_values("hour_of_day")
 
+    def _build_user_game_network(df: pd.DataFrame, min_game_hours: float = 20.0):
+        """
+        Build a bipartite network (Users <-> Games) where:
+        - Edge weight = total hours a user played a game
+        - Game node size = total hours across all users (scaled)
+        - User node size = constant
+        - Prune games with total hours < min_game_hours
+        Returns Plotly Figure.
+        """
+        if df.empty:
+            # Empty placeholder figure
+            return go.Figure(layout=dict(
+                xaxis=dict(visible=False), yaxis=dict(visible=False),
+                margin=dict(l=0, r=0, t=0, b=0)
+            ))
+
+        tmp = df.copy()
+        # Compute hours per user-game edge
+        per_edge = (
+            tmp.groupby(["user_name", "game_name"]).size().reset_index(name="snapshots")
+        )
+        minutes_per_snapshot = float(tmp["minutes_per_snapshot"].median() if not tmp["minutes_per_snapshot"].isna().all() else 5.0)
+        per_edge["hours"] = (per_edge["snapshots"] * minutes_per_snapshot) / 60.0
+
+        # Total hours per game and prune
+        game_totals = per_edge.groupby("game_name")["hours"].sum().rename("total_hours").reset_index()
+        keep_games = set(game_totals[game_totals["total_hours"] >= float(min_game_hours)]["game_name"].tolist())
+        per_edge = per_edge[per_edge["game_name"].isin(keep_games)]
+
+        if per_edge.empty:
+            return go.Figure(layout=dict(
+                xaxis=dict(visible=False), yaxis=dict(visible=False),
+                margin=dict(l=0, r=0, t=0, b=0)
+            ))
+
+        # Recompute totals after pruning
+        game_totals = per_edge.groupby("game_name")["hours"].sum().rename("total_hours").reset_index()
+        user_totals = per_edge.groupby("user_name")["hours"].sum().rename("total_hours").reset_index()
+
+        # Build NetworkX graph
+        G = nx.Graph()
+        # Add game nodes with attribute kind='game' and size based on total hours
+        game_hours_map = dict(zip(game_totals["game_name"], game_totals["total_hours"]))
+        for g, h in game_hours_map.items():
+            G.add_node(("game", g), kind="game", label=g, total_hours=float(h))
+        # Add user nodes with constant size, only those connected to remaining games
+        users = per_edge["user_name"].unique().tolist()
+        for u in users:
+            G.add_node(("user", u), kind="user", label=u)
+        # Add edges with weight = hours
+        for _, row in per_edge.iterrows():
+            G.add_edge(("user", row["user_name"]), ("game", row["game_name"]), weight=float(row["hours"]))
+
+        if G.number_of_edges() == 0:
+            return go.Figure(layout=dict(
+                xaxis=dict(visible=False), yaxis=dict(visible=False),
+                margin=dict(l=0, r=0, t=0, b=0)
+            ))
+
+        # Position using spring layout for attraction proportional to weight
+        # Heavier edges pull nodes closer; scale down for stability
+        weights = [d.get("weight", 1.0) for _, _, d in G.edges(data=True)]
+        max_w = max(weights) if weights else 1.0
+        norm_weights = [w / max_w for w in weights]
+        # Map normalized weights back to edges in same order
+        for (e, w) in zip(G.edges(data=True), norm_weights):
+            e[2]["norm_w"] = w
+
+        # Use spring_layout with edge weights (higher weight = stronger spring)
+        pos = nx.spring_layout(G, weight="weight", k=None, iterations=200, seed=42)
+
+        # Build Plotly scatter traces
+        # Build multiple edge traces binned by weight to approximate variable thickness
+        weights_all = [float(d.get("weight", 1.0)) for _, _, d in G.edges(data=True)]
+        w_min, w_max = min(weights_all), max(weights_all)
+        nbins = 5
+        # Create thresholds
+        if w_max == w_min:
+            bins = [w_min, w_max]
+        else:
+            bins = list(pd.interval_range(start=w_min, end=w_max, periods=nbins))
+
+        edge_traces = []
+        # Visual width range
+        min_w, max_w_vis = 0.8, 8.0
+        for i, interval in enumerate(bins if isinstance(bins[0], pd.Interval) else [pd.Interval(left=w_min-1e-9, right=w_max, closed='both')]):
+            ex, ey = [], []
+            for u, v, d in G.edges(data=True):
+                w = float(d.get("weight", 1.0))
+                in_bin = False
+                if isinstance(interval, pd.Interval):
+                    # include right edge for last bin
+                    if i == len(bins) - 1:
+                        in_bin = (w >= interval.left) and (w <= interval.right)
+                    else:
+                        in_bin = (w >= interval.left) and (w < interval.right)
+                else:
+                    in_bin = True
+                if not in_bin:
+                    continue
+                x0, y0 = pos[u]
+                x1, y1 = pos[v]
+                ex += [x0, x1, None]
+                ey += [y0, y1, None]
+            if not ex:
+                continue
+            # width for this bin: map interval midpoint to visual width
+            if isinstance(interval, pd.Interval):
+                mid = (float(interval.left) + float(interval.right)) / 2.0
+            else:
+                mid = (w_min + w_max) / 2.0
+            if w_max > w_min:
+                width = min_w + (max_w_vis - min_w) * ((mid - w_min) / (w_max - w_min))
+            else:
+                width = (min_w + max_w_vis) / 2
+            edge_traces.append(
+                go.Scatter(
+                    x=ex, y=ey,
+                    line=dict(width=width, color="#aaaaaa"),
+                    hoverinfo="none",
+                    mode="lines",
+                    opacity=0.5,
+                    showlegend=False,
+                )
+            )
+
+        # Node traces for users and games separately to manage sizes/colors
+        user_x, user_y, user_text = [], [], []
+        game_x, game_y, game_text, game_sizes = [], [], [], []
+        # Size mapping for games
+        g_hours_vals = list(game_hours_map.values())
+        g_min = min(g_hours_vals) if g_hours_vals else 0.0
+        g_max = max(g_hours_vals) if g_hours_vals else 1.0
+        # Visual size range in px
+        g_size_min, g_size_max = 12, 36
+
+        for n, attrs in G.nodes(data=True):
+            x, y = pos[n]
+            if attrs.get("kind") == "user":
+                user_x.append(x)
+                user_y.append(y)
+                user_text.append(attrs.get("label", ""))
+            else:
+                game_x.append(x)
+                game_y.append(y)
+                game_text.append(f"{attrs.get('label','')}<br>{attrs.get('total_hours',0):.1f} h total")
+                h = float(attrs.get("total_hours", 0.0))
+                if g_max > g_min:
+                    size = g_size_min + (g_size_max - g_size_min) * ((h - g_min) / (g_max - g_min))
+                else:
+                    size = (g_size_min + g_size_max) / 2
+                game_sizes.append(size)
+
+        user_trace = go.Scatter(
+            x=user_x, y=user_y,
+            mode="markers",
+            hoverinfo="text",
+            text=user_text,
+            marker=dict(
+                size=12,
+                color="#1f77b4",
+                line=dict(width=1, color="#ffffff"),
+            ),
+            name="User",
+        )
+
+        game_trace = go.Scatter(
+            x=game_x, y=game_y,
+            mode="markers",
+            hoverinfo="text",
+            text=game_text,
+            marker=dict(
+                size=game_sizes,
+                color="#ff7f0e",
+                line=dict(width=1, color="#333333"),
+            ),
+            name="Game",
+        )
+
+        fig = go.Figure(
+            data=[*edge_traces, user_trace, game_trace],
+            layout=go.Layout(
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                hovermode="closest",
+                margin=dict(l=10, r=10, t=10, b=10),
+                xaxis=dict(visible=False), yaxis=dict(visible=False),
+            ),
+        )
+        return fig
+
     def _agg_total_voice_users_over_time(df: pd.DataFrame) -> pd.DataFrame:
         """Summe der Nutzer über alle Sprachkanäle je Zeitstempel."""
         if df.empty:
@@ -278,6 +471,9 @@ def create_app(database: Database):
     fig_voice_users.update_layout(dragmode="select", selectdirection="h")
     fig_voice_users.update_yaxes(fixedrange=True)
     fig_voice_users.update_layout(xaxis_title="Datum", yaxis_title="Peak Nutzer/Tag")
+
+    # 6) Netzwerkgraph: Nutzer <-> Spiele
+    fig_network = _build_user_game_network(df_steam_game_activity_initial, min_game_hours=20.0)
 
     app.layout = html.Div(
         [
@@ -397,6 +593,30 @@ def create_app(database: Database):
                                 "resetScale2d",
                             ],
                         },
+                    ),
+                ],
+                style={"marginBottom": "2em"},
+            ),
+            html.Div(
+                [
+                    html.H2("Nutzer–Spiel Netzwerk (gewichtete Kanten)", id="hdr-user-game-network"),
+                    dcc.Graph(
+                        id="graph-user-game-network",
+                        figure=fig_network,
+                        config={
+                            "displaylogo": False,
+                            "scrollZoom": False,
+                            "modeBarButtonsToRemove": [
+                                "zoom2d",
+                                "pan2d",
+                                "lasso2d",
+                                "zoomIn2d",
+                                "zoomOut2d",
+                                "autoScale2d",
+                                "resetScale2d",
+                            ],
+                        },
+                        style={"height": "700px"},
                     ),
                 ],
                 style={"marginBottom": "2em"},
