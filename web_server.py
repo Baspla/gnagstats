@@ -104,14 +104,6 @@ def create_app(database: Database):
     app.layout = html.Div(
         [
             html.H1("GNAG Stats – Übersicht"),
-        html.Div(
-                [
-                    html.Button("Neu laden", id="btn-refresh", n_clicks=0, style={"marginRight": "1em"}),
-            dcc.Interval(id="auto-refresh", interval=max(1, WEB_CACHE_TTL_MINUTES) * 60_000, n_intervals=0),
-                    html.Span(id="status-text", style={"marginLeft": "1em", "color": "#666"}),
-                ],
-                style={"marginBottom": "1em"},
-            ),
             html.Div(
                 [
                     html.H2("Spielzeit pro Spiel (Balken)"),
@@ -150,11 +142,9 @@ def create_app(database: Database):
         Output("graph-heatmap-user-game", "figure"),
         Output("graph-by-hour", "figure"),
         Output("status-text", "children"),
-        Input("auto-refresh", "n_intervals"),
-        Input("btn-refresh", "n_clicks"),
         prevent_initial_call=False,
     )
-    def _refresh_graphs(_intervals, _clicks):  # noqa: D401
+    def _refresh_graphs():  # noqa: D401
         df = _load_dataframe(force=_clicks and _clicks > 0)
 
         # 1) Bar: playtime per game
