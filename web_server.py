@@ -490,26 +490,39 @@ def create_app(database: Database):
         [
             html.Div(
                 [
-                    html.Label("Zeitraum auswählen:"),
-                    dcc.DatePickerRange(
-                        id="date-range",
-                        min_date_allowed=min_date_global,
-                        max_date_allowed=max_date_global,
-                        start_date=min_date_global,
-                        end_date=max_date_global,
-                        display_format="YYYY-MM-DD",
-                        minimum_nights=0,
+                    html.H1("GNAG Stats", style={"textAlign": "center"}),
+                    html.Div(
+                        [
+                            html.Label("Zeitraum auswählen:"),
+                            dcc.DatePickerRange(
+                                id="date-range",
+                                min_date_allowed=min_date_global,
+                                max_date_allowed=max_date_global,
+                                start_date=min_date_global,
+                                end_date=max_date_global,
+                                first_day_of_week=1,  # Monday
+                                display_format="YYYY-MM-DD",
+                                minimum_nights=0,
+                            ),
+                        ],
+                        style={
+                            "display": "flex",
+                            "gap": "1rem",
+                            "alignItems": "center",
+                            "flexWrap": "wrap",
+                            "marginBottom": "1.5em",
+                        },
                     ),
                 ],
                 style={
-                    "display": "flex",
-                    "gap": "1rem",
-                    "alignItems": "center",
-                    "flexWrap": "wrap",
-                    "marginBottom": "1.5em",
+                    "position": "sticky",
+                    "top": "0",
+                    "background": "white",
+                    "zIndex": 100,
+                    "paddingBottom": "1em",
+                    "boxShadow": "0 2px 8px rgba(0,0,0,0.04)",
                 },
             ),
-            html.H1("GNAG Stats", style={"textAlign": "center"}),
             html.Div(
                 [
                     html.H2("Spielzeit pro Spiel", id="hdr-playtime-per-game"),
@@ -520,7 +533,6 @@ def create_app(database: Database):
                                 style={
                                     "flex": "1",
                                     "minWidth": 0,
-                                    # Nur vertikal scrollen, um viele Labels zu handeln
                                     "height": "600px",
                                     "overflowY": "auto",
                                     "overflowX": "hidden",
