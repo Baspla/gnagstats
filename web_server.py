@@ -565,108 +565,150 @@ def create_app(database: Database):
         )
         return fig
 
-    def _build_voice_24h_timeline() -> "go.Figure":
-        """Erzeugt eine Timeline (letzte 24h) der Voice-Sessions je User.
+    def _build_voice_24h_timeline(df: pd.DataFrame):
+        """Erzeuge eine Timeline (letzte 24h) mit zusammengefassten Voice-Sessions.
 
-        Unabhängig vom globalen Datumsfilter. Gruppiert Snapshots zu Sessions pro
-        (user_name, channel_name). Eine Session endet, wenn die Lücke zwischen zwei
-        aufeinanderfolgenden Snapshots größer als (collection_interval * 2.2) Sekunden ist.
-        Endzeit = letzter Snapshot + collection_interval (damit Balken bis zum erwarteten Ende reicht).
+        - X-Achse: Zeit (letzte 24 Stunden, Format Stunde:Minute)
+        - Y-Achse: User (alle, die in den letzten 24h in einem Voice Kanal waren)
+        - Ein Balken pro zusammenhängender Session (gleicher Channel, keine zu große Lücke)
+        - Hover zeigt Dauer und Kanal
         """
         import plotly.express as px
         import plotly.graph_objects as go
         from datetime import datetime, timedelta
+        import math
 
-        df_voice = _load_df_discord_voice_activity()  # Cache genutzt
-        if df_voice.empty or "timestamp_dt" not in df_voice.columns:
-            return go.Figure(layout=dict(
-                title="Discord Voice Sessions – letzte 24h (keine Daten)",
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
-                margin=dict(l=10, r=10, t=40, b=10),
-            ))
-
-        now_dt = pd.Timestamp.utcnow()
-        cutoff = now_dt - pd.Timedelta(hours=24)
-        recent = df_voice[df_voice["timestamp_dt"] >= cutoff].copy()
-        if recent.empty:
-            return go.Figure(layout=dict(
-                title="Discord Voice Sessions – letzte 24h (keine aktuellen Daten)",
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
-                margin=dict(l=10, r=10, t=40, b=10),
-            ))
+        if df.empty:
+            return go.Figure(layout=dict(title="Voice Aktivität letzte 24h (keine Daten)"))
 
         # Sicherstellen user_name existiert
-        if "user_name" not in recent.columns:
-            recent["user_name"] = recent["discord_id"].astype(str)
+        if "user_name" not in df.columns:
+            return go.Figure(layout=dict(title="Voice Aktivität letzte 24h (fehlende user_name Spalte)"))
 
-        # Sortierung für diff()
-        recent = recent.sort_values(["user_name", "channel_name", "timestamp_dt"]).reset_index(drop=True)
+        now_ts = int(time.time())
+        cutoff_ts = now_ts - 24 * 3600
+        mask = df["timestamp"] >= cutoff_ts
+        recent = df.loc[mask].copy()
+        if recent.empty:
+            return go.Figure(layout=dict(title="Voice Aktivität letzte 24h (keine Daten im Zeitraum)"))
 
-        # Dynamischer Threshold: median collection_interval * 2.2 (Fallback 300s)
-        base_interval = float(recent["collection_interval"].median() if not recent["collection_interval"].isna().all() else 300.0)
-        gap_threshold = base_interval * 2.2  # z.B. 300 * 2.2 ≈ 660 (ähnlich Notebook 650)
+        # Falls timestamp_dt fehlt -> erzeugen
+        if "timestamp_dt" not in recent.columns:
+            recent["timestamp_dt"] = pd.to_datetime(recent["timestamp"], unit="s")
 
-        # Zeitdifferenzen
-        recent["time_diff"] = (
-            recent.groupby(["user_name", "channel_name"]) ["timestamp_dt"].diff().dt.total_seconds().fillna(0)
-        )
-        recent["new_session"] = (recent["time_diff"] > gap_threshold).astype(int)
-        recent["session_id"] = recent.groupby(["user_name", "channel_name"]) ["new_session"].cumsum()
+        default_interval = float(recent["collection_interval"].dropna().median() if not recent["collection_interval"].dropna().empty else 300.0)
+        # Grenzen als datetime
+        cutoff_dt = datetime.utcfromtimestamp(cutoff_ts)
+        now_dt = datetime.utcfromtimestamp(now_ts)
 
-        # Session-Aggregation
-        sessions = (
-            recent.groupby(["user_name", "channel_name", "session_id"]) ["timestamp_dt", "collection_interval"].agg(
-                start_time=("timestamp_dt", "min"),
-                last_snapshot=("timestamp_dt", "max"),
-                avg_interval=("collection_interval", "median"),
-                count_snapshots=("timestamp_dt", "count"),
-            ).reset_index()
-        )
-        # Endzeit um ein Intervall erweitern
-        sessions["avg_interval"] = sessions["avg_interval"].fillna(base_interval)
-        sessions["end_time"] = sessions["last_snapshot"] + pd.to_timedelta(sessions["avg_interval"], unit="s")
-        sessions["duration_minutes"] = (sessions["end_time"] - sessions["start_time"]).dt.total_seconds() / 60.0
+        sessions = []  # Sammler für Session-Dicts
+        # Gruppieren nach User (alphabetisch für stabile Y-Achse)
+        for user, g in recent.groupby("user_name"):
+            g = g.sort_values("timestamp").reset_index(drop=True)
+            current = None  # {channel, start_ts, end_ts}
+            prev_row = None
+            for _, row in g.iterrows():
+                ts = int(row["timestamp"])
+                chan = row.get("channel_name", "?") or "?"
+                interv = row.get("collection_interval")
+                try:
+                    interv = float(interv)
+                    if not math.isfinite(interv) or interv <= 0:
+                        raise ValueError
+                except Exception:
+                    interv = default_interval
 
-        # Nur Sessions behalten die irgendeine Überlappung mit (cutoff, now)
-        sessions = sessions[(sessions["end_time"] >= cutoff) & (sessions["start_time"] <= now_dt)]
-        if sessions.empty:
-            return go.Figure(layout=dict(
-                title="Discord Voice Sessions – letzte 24h (keine Sessions)",
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
-                margin=dict(l=10, r=10, t=40, b=10),
-            ))
+                # End-Annahme für einzelne Snapshot -> ts + interv
+                snapshot_end = ts + interv
 
-        # Plotly Timeline (y = User), Farbe = Channel
+                if current is None:
+                    current = {
+                        "user_name": user,
+                        "channel_name": chan,
+                        "start_ts": ts,
+                        "end_ts": snapshot_end,
+                    }
+                else:
+                    gap = ts - prev_row["timestamp"] if prev_row is not None else 0
+                    prev_interv = prev_row.get("collection_interval") if prev_row is not None else default_interval
+                    try:
+                        prev_interv = float(prev_interv)
+                        if not math.isfinite(prev_interv) or prev_interv <= 0:
+                            raise ValueError
+                    except Exception:
+                        prev_interv = default_interval
+                    # Erlaube eine Lücke bis 1.5 * max(prev, current interv)
+                    max_gap = 1.5 * max(prev_interv, interv)
+                    if chan == current["channel_name"] and gap <= max_gap:
+                        # Session erweitern
+                        if snapshot_end > current["end_ts"]:
+                            current["end_ts"] = snapshot_end
+                    else:
+                        # Session abschließen
+                        if current["end_ts"] > current["start_ts"]:
+                            sessions.append(current)
+                        # Neue Session starten
+                        current = {
+                            "user_name": user,
+                            "channel_name": chan,
+                            "start_ts": ts,
+                            "end_ts": snapshot_end,
+                        }
+                prev_row = row
+            # Letzte Session flushen
+            if current is not None and current["end_ts"] > current["start_ts"]:
+                sessions.append(current)
+
+        if not sessions:
+            return go.Figure(layout=dict(title="Voice Aktivität letzte 24h (keine Sessions)"))
+
+        sess_df = pd.DataFrame(sessions)
+        # Begrenzen auf Zeitfenster (Clip), falls Session über Rand hinaus
+        sess_df["start_ts"] = sess_df["start_ts"].clip(lower=cutoff_ts)
+        sess_df["end_ts"] = sess_df["end_ts"].clip(upper=now_ts)
+        # Konvertieren zu datetime
+        sess_df["start_dt"] = pd.to_datetime(sess_df["start_ts"], unit="s")
+        sess_df["end_dt"] = pd.to_datetime(sess_df["end_ts"], unit="s")
+        # Dauer (Sek / Min / h) für Hover
+        sess_df["duration_seconds"] = (sess_df["end_ts"] - sess_df["start_ts"]).astype(float)
+        sess_df["duration_minutes"] = sess_df["duration_seconds"] / 60.0
+        sess_df["duration_hours"] = sess_df["duration_minutes"] / 60.0
+
+        # Entferne Null-/Negativ-Längen
+        sess_df = sess_df[sess_df["duration_seconds"] > 0]
+        if sess_df.empty:
+            return go.Figure(layout=dict(title="Voice Aktivität letzte 24h (keine Sessions)", height=400))
+
+        # Timeline bauen
         fig = px.timeline(
-            sessions,
-            x_start="start_time",
-            x_end="end_time",
+            sess_df,
+            x_start="start_dt",
+            x_end="end_dt",
             y="user_name",
             color="channel_name",
             hover_data={
                 "channel_name": True,
                 "duration_minutes": ":.1f",
-                "count_snapshots": True,
-                "start_time": True,
-                "end_time": True,
+                "duration_hours": ":.2f",
+                "start_dt": True,
+                "end_dt": True,
             },
+            title="Voice Aktivität letzte 24h",
         )
-
+        # Y-Achse alphabetisch (px.timeline kehrt standardmäßig um -> wir setzen explizit)
+        users_sorted = sorted(sess_df["user_name"].unique())
+        fig.update_yaxes(categoryorder="array", categoryarray=users_sorted, autorange="reversed")
+        # X-Achse Bereich & Format
+        fig.update_xaxes(range=[cutoff_dt, now_dt], tickformat="%H:%M", title_text="Zeit (UTC, letzte 24h)")
+        fig.update_yaxes(title_text="User")
         fig.update_layout(
-            title="Discord Voice Sessions – letzte 24h",
-            xaxis_title="Uhrzeit (UTC)",
-            yaxis_title="User",
-            margin=dict(l=10, r=10, t=60, b=10),
-            hovermode="closest",
-            legend_title="Channel",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            margin=dict(l=40, r=20, t=60, b=40),
+            hoverlabel=dict(bgcolor="white"),
+            height=max(400, min(1200, 30 * len(users_sorted))),
         )
-        # X-Achse auf letzten 24h begrenzen, Tickformat nur Zeit
-        fig.update_xaxes(range=[cutoff, now_dt], tickformat="%H:%M", showgrid=True)
-        # Fixierte y-Achse (kein Zoomen per Scroll)
-        fig.update_yaxes(autorange="reversed")  # Timeline standardmäßig invertiert -> wieder invertieren für alphabetisch oben
+        # Vertikale Linie für "Jetzt"
+        fig.add_vline(x=now_dt, line_dash="dot", line_color="red", annotation_text="Jetzt", annotation_position="top right")
         return fig
 
 
@@ -676,6 +718,8 @@ def create_app(database: Database):
     df_discord_voice_activity_initial = _load_df_discord_voice_activity(force=True)
     df_discord_voice_channels_initial = _load_df_discord_voice_channels(force=True)
     df_discord_game_activity_initial = _load_df_discord_game_activity(force=True)
+    # 24h Voice Timeline initial
+    fig_voice_24h_timeline_initial = _build_voice_24h_timeline(df_discord_voice_activity_initial)
 
     # Ermittlung globaler Min/Max-Datum für DatePicker
     from datetime import date, timedelta
@@ -1003,25 +1047,6 @@ def create_app(database: Database):
             ),
             html.Div(
                 [
-                    html.H2("Discord Voice Sessions – letzte 24h", id="hdr-voice-24h-timeline"),
-                    dcc.Graph(
-                        id="graph-voice-24h-timeline",
-                        figure=_build_voice_24h_timeline(),
-                        config={
-                            "displaylogo": False,
-                            "scrollZoom": False,
-                            "modeBarButtonsToRemove": [
-                                "zoom2d","pan2d","lasso2d","zoomIn2d","zoomOut2d","autoScale2d","resetScale2d"
-                            ],
-                        },
-                        style={"height": "600px"},
-                    ),
-                    dcc.Interval(id="interval-refresh-voice-24h", interval=300*1000, n_intervals=0),  # alle 5min
-                ],
-                style={"marginBottom": "2em"},
-            ),
-            html.Div(
-                [
                     html.H2("Nutzer–Spiel Netzwerk", id="hdr-user-game-network"),
                     dcc.Graph(
                         id="graph-user-game-network",
@@ -1052,6 +1077,30 @@ def create_app(database: Database):
                 ],
                 style={"marginBottom": "2em"},
             ),
+            html.Div(
+                [
+                    html.H2("Voice Aktivität (letzte 24h)", id="hdr-voice-24h-timeline"),
+                    dcc.Graph(
+                        id="graph-voice-24h-timeline",
+                        figure=fig_voice_24h_timeline_initial,
+                        config={
+                            "displaylogo": False,
+                            "scrollZoom": True,
+                            "modeBarButtonsToRemove": [
+                                "zoom2d",
+                                "pan2d",
+                                "lasso2d",
+                                "zoomIn2d",
+                                "zoomOut2d",
+                                "autoScale2d",
+                                "resetScale2d",
+                            ],
+                        },
+                        style={"height": "600px"},
+                    ),
+                ],
+                style={"marginBottom": "2em"},
+            ),
         ],
         style={"fontFamily": "Arial, sans-serif", "margin": "2em"},
     )
@@ -1067,6 +1116,7 @@ def create_app(database: Database):
             Output("graph-voice-users-over-time", "figure"),
             Output("graph-user-game-network", "figure"),
             Output("graph-voice-user-network", "figure"),
+            Output("graph-voice-24h-timeline", "figure"),
             Output("table-recent-players", "data"),
         ],
         [Input("date-range", "start_date"), Input("date-range", "end_date"), Input("top-n-games-slider", "value")],
@@ -1168,8 +1218,10 @@ def create_app(database: Database):
         # Voice User Netzwerk
         df_voice_activity_f = _filter(df_voice_activity)
         fig_voice_user_network_f = _build_voice_user_network(df_voice_activity_f)
+        # 24h Timeline (immer unfiltriert über letzten 24h Bereich, unabhängig vom gewählten Zeitraum)
+        fig_voice_24h_timeline_f = _build_voice_24h_timeline(df_voice_activity)
 
-        # Tabelle aktuelle Spieler
+        # Tabelle aktuelle Spieler (immer gegen ungefiltertes df_steam, damit wirklich "jetzt")
         recent_players_df = _recent_players_df(df_steam)
         recent_players_data = recent_players_df.to_dict("records") if not recent_players_df.empty else []
 
@@ -1182,16 +1234,9 @@ def create_app(database: Database):
             fig_voice_users_f,
             fig_network_f,
             fig_voice_user_network_f,
+            fig_voice_24h_timeline_f,
             recent_players_data,
         ]
-
-    # Separater Callback für 24h Voice Timeline (unabhängig vom DatePicker)
-    @app.callback(
-        Output("graph-voice-24h-timeline", "figure"),
-        Input("interval-refresh-voice-24h", "n_intervals")
-    )
-    def _refresh_voice_24h(_n):  # noqa: D401
-        return _build_voice_24h_timeline()
 
     return app
 
