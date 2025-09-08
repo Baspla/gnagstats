@@ -13,7 +13,7 @@ from waitress import serve
 
 def create_app(database: Database):
     """Create a Dash app with dedicated web queries and rich visualizations."""
-    from dash import Dash, html, dcc
+    from dash import Dash, html, dcc, Input, Output
     import plotly.express as px
     import plotly.graph_objects as go
     import networkx as nx
@@ -408,7 +408,19 @@ def create_app(database: Database):
     df_discord_voice_channels_initial = _load_df_discord_voice_channels(force=True)
     df_discord_game_activity_initial = _load_df_discord_game_activity(force=True)
 
-    # 1) Bar: playtime per game
+    # Ermittlung globaler Min/Max-Datum für DatePicker
+    from datetime import date, timedelta
+    if not df_steam_game_activity_initial.empty:
+        min_date_global = df_steam_game_activity_initial["timestamp_dt"].min().date()
+        max_date_global = df_steam_game_activity_initial["timestamp_dt"].max().date()
+    elif not df_discord_voice_channels_initial.empty:
+        min_date_global = df_discord_voice_channels_initial["timestamp_dt"].min().date()
+        max_date_global = df_discord_voice_channels_initial["timestamp_dt"].max().date()
+    else:
+        max_date_global = date.today()
+        min_date_global = max_date_global - timedelta(days=30)
+
+    # 1) Bar: playtime per game (Initial – wird durch Callback aktualisiert)
     per_game = _agg_playtime_per_game(df_steam_game_activity_initial)
     fig_bar = px.bar(per_game.head(40), x="total_hours_played", y="game_name", orientation="h", color="game_name")
     fig_bar.update_layout(showlegend=False, xaxis_title="Stunden", yaxis_title="Spiel")
@@ -472,10 +484,31 @@ def create_app(database: Database):
     fig_voice_users.update_layout(xaxis_title="Datum", yaxis_title="Peak Nutzer/Tag")
 
     # 6) Netzwerkgraph: Nutzer <-> Spiele
-    fig_network = _build_user_game_network(df_steam_game_activity_initial, min_game_hours=0.0)
+    fig_network = _build_user_game_network(df_steam_game_activity_initial, min_game_hours=10.0)
 
     app.layout = html.Div(
         [
+            html.Div(
+                [
+                    html.Label("Zeitraum auswählen:"),
+                    dcc.DatePickerRange(
+                        id="date-range",
+                        min_date_allowed=min_date_global,
+                        max_date_allowed=max_date_global,
+                        start_date=min_date_global,
+                        end_date=max_date_global,
+                        display_format="YYYY-MM-DD",
+                        minimum_nights=0,
+                    ),
+                ],
+                style={
+                    "display": "flex",
+                    "gap": "1rem",
+                    "alignItems": "center",
+                    "flexWrap": "wrap",
+                    "marginBottom": "1.5em",
+                },
+            ),
             html.H1("GNAG Stats", style={"textAlign": "center"}),
             html.Div(
                 [
@@ -615,6 +648,108 @@ def create_app(database: Database):
         ],
         style={"fontFamily": "Arial, sans-serif", "margin": "2em"},
     )
+
+    # Callback zur Aktualisierung aller Diagramme anhand des gewählten Datumsbereichs
+    @app.callback(
+        [
+            Output("graph-playtime-per-game", "figure"),
+            Output("graph-playtime-pie", "figure"),
+            Output("graph-daily-time", "figure"),
+            Output("graph-heatmap-user-game", "figure"),
+            Output("graph-by-hour", "figure"),
+            Output("graph-voice-users-over-time", "figure"),
+            Output("graph-user-game-network", "figure"),
+        ],
+        [Input("date-range", "start_date"), Input("date-range", "end_date")],
+    )
+    def _update_all(start_date, end_date):  # noqa: D401
+        """Update all graphs when date range changes."""
+        import plotly.express as px  # Lokal, falls Dash Hot Reload
+        import plotly.graph_objects as go
+        # Laden (ggf. Cache)
+        df_steam = _load_df_steam_game_activity()
+        df_voice_channels = _load_df_discord_voice_channels()
+
+        # Filterfunktion
+        def _filter(df: pd.DataFrame):
+            if df.empty or start_date is None or end_date is None or "timestamp_dt" not in df.columns:
+                return df
+            # end_date inklusiv -> +1 Tag exklusiv
+            try:
+                start = pd.to_datetime(start_date)
+                end = pd.to_datetime(end_date) + pd.Timedelta(days=1)
+            except Exception:
+                return df
+            return df[(df["timestamp_dt"] >= start) & (df["timestamp_dt"] < end)]
+
+        df_steam_f = _filter(df_steam)
+        df_voice_channels_f = _filter(df_voice_channels)
+
+        # Re-Aggregationen
+        per_game_f = _agg_playtime_per_game(df_steam_f)
+        fig_bar_f = px.bar(per_game_f.head(40), x="total_hours_played", y="game_name", orientation="h", color="game_name")
+        fig_bar_f.update_layout(showlegend=False, xaxis_title="Stunden", yaxis_title="Spiel")
+        try:
+            n_bars_local = int(min(len(per_game_f), 40)) if per_game_f is not None else 0
+        except Exception:
+            n_bars_local = 0
+        fig_bar_f.update_layout(height=max(500, min(2400, 34 * max(1, n_bars_local))))
+
+        fig_pie_f = px.pie(per_game_f.head(40), values="total_hours_played", names="game_name")
+        fig_pie_f.update_layout(margin=dict(l=0, r=0, t=0, b=0))
+
+        daily_f = _agg_daily_hours(df_steam_f)
+        daily_no_gap_f = daily_f.copy()
+        if not daily_no_gap_f.empty and "total_hours" in daily_no_gap_f.columns:
+            daily_no_gap_f.loc[daily_no_gap_f["total_hours"] <= 0, "total_hours"] = None
+        fig_line_f = px.bar(daily_no_gap_f, x="date", y="total_hours")
+        fig_line_f.update_layout(dragmode="select", selectdirection="h")
+        fig_line_f.update_yaxes(fixedrange=True)
+        fig_line_f.update_layout(xaxis_title="Datum", yaxis_title="Stunden pro Tag")
+
+        heat_f = _agg_heatmap_user_top_games(df_steam_f)
+        if heat_f.empty:
+            fig_heat_f = px.imshow([[0]], labels=dict(x="Spiel", y="Nutzer", color="Stunden"))
+            fig_heat_f.update_xaxes(visible=False)
+            fig_heat_f.update_yaxes(visible=False)
+        else:
+            fig_heat_f = px.imshow(
+                heat_f.values,
+                x=list(heat_f.columns),
+                y=list(heat_f.index),
+                color_continuous_scale="YlGnBu",
+                aspect="auto",
+                labels=dict(color="Stunden"),
+            )
+            fig_heat_f.update_layout(xaxis_title="Spiel", yaxis_title="Nutzer")
+        fig_heat_f.update_xaxes(fixedrange=True)
+        fig_heat_f.update_yaxes(fixedrange=True)
+
+        by_hour_f = _agg_hours_by_hour_of_day(df_steam_f)
+        fig_hour_f = px.bar(by_hour_f, x="hour_of_day", y="total_hours")
+        fig_hour_f.update_layout(dragmode="select", selectdirection="h")
+        fig_hour_f.update_yaxes(fixedrange=True)
+        fig_hour_f.update_layout(xaxis_title="Stunde (0-23)", yaxis_title="Stunden")
+
+        voice_users_daily_peak_f = _agg_daily_peak_voice_users(df_voice_channels_f)
+        fig_voice_users_f = px.scatter(voice_users_daily_peak_f, x="date", y="total_users")
+        fig_voice_users_f.update_traces(mode="markers", marker=dict(size=7))
+        fig_voice_users_f.update_layout(dragmode="select", selectdirection="h")
+        fig_voice_users_f.update_yaxes(fixedrange=True)
+        fig_voice_users_f.update_layout(xaxis_title="Datum", yaxis_title="Peak Nutzer/Tag")
+
+        # Netzwerk (verwende Steam Game Activity DataFrame – gleiche Filter)
+        fig_network_f = _build_user_game_network(df_steam_f, min_game_hours=10.0)
+
+        return [
+            fig_bar_f,
+            fig_pie_f,
+            fig_line_f,
+            fig_heat_f,
+            fig_hour_f,
+            fig_voice_users_f,
+            fig_network_f,
+        ]
 
     return app
 
