@@ -248,7 +248,8 @@ def create_app(database: Database):
 
     # 5) Line: Gesamtanzahl Nutzer in Sprachkanälen über die Zeit
     voice_users_over_time = _agg_total_voice_users_over_time(df_discord_voice_channels_initial)
-    fig_voice_users = px.line(voice_users_over_time, x="timestamp_dt", y="total_users")
+    fig_voice_users = px.scatter(voice_users_over_time, x="timestamp_dt", y="total_users")
+    fig_voice_users.update_traces(mode="markers", marker=dict(size=6))
     fig_voice_users.update_layout(xaxis_title="Zeit", yaxis_title="Gesamtnutzer in Sprachkanälen")
 
     app.layout = html.Div(
