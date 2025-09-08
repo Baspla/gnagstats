@@ -565,121 +565,108 @@ def create_app(database: Database):
         )
         return fig
 
-    def _build_today_voice_timeline():
-        """
-        Erzeugt eine Timeline (nur heutiger Tag, unabhängig vom ausgewählten Zeitraum)
-        für Discord Voice Aktivität auf Basis von discord_voice_activity.
+    def _build_voice_24h_timeline() -> "go.Figure":
+        """Erzeugt eine Timeline (letzte 24h) der Voice-Sessions je User.
 
-        - X-Achse: Tageszeit 0–24 Uhr (heutiger Tag, Mitternacht bis Mitternacht morgen)
-        - Y-Achse: Nutzer (alle, die heute mindestens einmal im Voice waren)
-        - Balken: zusammengefasste Sessions (User + Channel), getrennt durch Lücken > ~10 Minuten
-        - Hover: Channel + Dauer
-
-        Falls keine Daten vorhanden sind, wird eine leere Platzhalter-Grafik geliefert.
+        Unabhängig vom globalen Datumsfilter. Gruppiert Snapshots zu Sessions pro
+        (user_name, channel_name). Eine Session endet, wenn die Lücke zwischen zwei
+        aufeinanderfolgenden Snapshots größer als (collection_interval * 2.2) Sekunden ist.
+        Endzeit = letzter Snapshot + collection_interval (damit Balken bis zum erwarteten Ende reicht).
         """
         import plotly.express as px
-        from datetime import datetime, date, timedelta
-        import pandas as _pd
+        import plotly.graph_objects as go
+        from datetime import datetime, timedelta
 
-        df_voice = _load_df_discord_voice_activity()  # nutzt Cache
+        df_voice = _load_df_discord_voice_activity()  # Cache genutzt
         if df_voice.empty or "timestamp_dt" not in df_voice.columns:
-            return px.imshow([[0]], labels=dict(x="Zeit", y="Nutzer"), title="Voice Timeline (Heute) – keine Daten")
+            return go.Figure(layout=dict(
+                title="Discord Voice Sessions – letzte 24h (keine Daten)",
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                margin=dict(l=10, r=10, t=40, b=10),
+            ))
 
-        # Heutiger Bereich [00:00, morgen 00:00)
-        today = date.today()
-        start_day = datetime.combine(today, datetime.min.time())
-        end_day = start_day + timedelta(days=1)
+        now_dt = pd.Timestamp.utcnow()
+        cutoff = now_dt - pd.Timedelta(hours=24)
+        recent = df_voice[df_voice["timestamp_dt"] >= cutoff].copy()
+        if recent.empty:
+            return go.Figure(layout=dict(
+                title="Discord Voice Sessions – letzte 24h (keine aktuellen Daten)",
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                margin=dict(l=10, r=10, t=40, b=10),
+            ))
 
-        day_df = df_voice[(df_voice["timestamp_dt"] >= start_day) & (df_voice["timestamp_dt"] < end_day)].copy()
-        if day_df.empty:
-            return px.imshow([[0]], labels=dict(x="Zeit", y="Nutzer"), title="Voice Timeline (Heute) – keine Daten")
+        # Sicherstellen user_name existiert
+        if "user_name" not in recent.columns:
+            recent["user_name"] = recent["discord_id"].astype(str)
 
-        # Sicherstellen user_name vorhanden
-        if "user_name" not in day_df.columns:
-            day_df["user_name"] = day_df["discord_id"].astype(str)
+        # Sortierung für diff()
+        recent = recent.sort_values(["user_name", "channel_name", "timestamp_dt"]).reset_index(drop=True)
 
-        # Sortierung
-        day_df = day_df.sort_values(["user_name", "channel_name", "timestamp_dt"]).reset_index(drop=True)
+        # Dynamischer Threshold: median collection_interval * 2.2 (Fallback 300s)
+        base_interval = float(recent["collection_interval"].median() if not recent["collection_interval"].isna().all() else 300.0)
+        gap_threshold = base_interval * 2.2  # z.B. 300 * 2.2 ≈ 660 (ähnlich Notebook 650)
 
-        # Zeitdifferenzen innerhalb (user_name, channel_name)
-        day_df["time_diff"] = (
-            day_df.groupby(["user_name", "channel_name"]) ["timestamp_dt"].diff().dt.total_seconds().fillna(0)
+        # Zeitdifferenzen
+        recent["time_diff"] = (
+            recent.groupby(["user_name", "channel_name"]) ["timestamp_dt"].diff().dt.total_seconds().fillna(0)
         )
-        # Schwelle für neue Session (ähnlich Beispiel: >650s). Verwende 650 als Standard, oder 2 * median interval.
-        median_interval_sec = float(day_df["minutes_per_snapshot"].median() * 60.0) if "minutes_per_snapshot" in day_df.columns else 300.0
-        dynamic_threshold = max(650.0, 2.1 * median_interval_sec)  # verhindert zu frühes Splitten bei größerem Intervall
-        day_df["new_session"] = (day_df["time_diff"] > dynamic_threshold).astype(int)
-        # Session ID je (user, channel)
-        day_df["session_id"] = day_df.groupby(["user_name", "channel_name"]) ["new_session"].cumsum()
+        recent["new_session"] = (recent["time_diff"] > gap_threshold).astype(int)
+        recent["session_id"] = recent.groupby(["user_name", "channel_name"]) ["new_session"].cumsum()
 
-        # Aggregation: Start / Ende je Session
+        # Session-Aggregation
         sessions = (
-            day_df.groupby(["user_name", "channel_name", "session_id"]).agg(
+            recent.groupby(["user_name", "channel_name", "session_id"]) ["timestamp_dt", "collection_interval"].agg(
                 start_time=("timestamp_dt", "min"),
-                end_time=("timestamp_dt", "max"),
-                snapshots=("timestamp", "count"),
-                median_minutes=("minutes_per_snapshot", "median") if "minutes_per_snapshot" in day_df.columns else ("timestamp", "count"),
-            ).reset_index(drop=False)
+                last_snapshot=("timestamp_dt", "max"),
+                avg_interval=("collection_interval", "median"),
+                count_snapshots=("timestamp_dt", "count"),
+            ).reset_index()
         )
+        # Endzeit um ein Intervall erweitern
+        sessions["avg_interval"] = sessions["avg_interval"].fillna(base_interval)
+        sessions["end_time"] = sessions["last_snapshot"] + pd.to_timedelta(sessions["avg_interval"], unit="s")
+        sessions["duration_minutes"] = (sessions["end_time"] - sessions["start_time"]).dt.total_seconds() / 60.0
 
-        # Fallback median Minutes
-        if "median_minutes" not in sessions.columns:
-            sessions["median_minutes"] = day_df.get("minutes_per_snapshot", _pd.Series([5.0]*len(day_df))).median()
-        sessions["median_minutes"].fillna(day_df.get("minutes_per_snapshot", _pd.Series([5.0]*len(day_df))).median(), inplace=True)
+        # Nur Sessions behalten die irgendeine Überlappung mit (cutoff, now)
+        sessions = sessions[(sessions["end_time"] >= cutoff) & (sessions["start_time"] <= now_dt)]
+        if sessions.empty:
+            return go.Figure(layout=dict(
+                title="Discord Voice Sessions – letzte 24h (keine Sessions)",
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                margin=dict(l=10, r=10, t=40, b=10),
+            ))
 
-        # Ende um ein Snapshot verlängern (repräsentiert durchgehende Präsenz bis nächste Messung)
-        sessions["end_time_plus"] = sessions["end_time"] + _pd.to_timedelta(sessions["median_minutes"], unit="m")
-        # Dauer in Minuten
-        sessions["duration_min"] = (sessions["end_time_plus"] - sessions["start_time"]).dt.total_seconds() / 60.0
-
-        # Plot DataFrame für px.timeline
-        plot_df = sessions.rename(columns={"user_name": "Nutzer", "channel_name": "Channel"})
-
-        if plot_df.empty:
-            return px.imshow([[0]], labels=dict(x="Zeit", y="Nutzer"), title="Voice Timeline (Heute) – keine Daten")
-
+        # Plotly Timeline (y = User), Farbe = Channel
         fig = px.timeline(
-            plot_df,
+            sessions,
             x_start="start_time",
-            x_end="end_time_plus",
-            y="Nutzer",
-            color="Channel",
-            hover_data={  # bleibt für Inspector sichtbar
-                "Channel": True,
-                "duration_min": ":.1f",
+            x_end="end_time",
+            y="user_name",
+            color="channel_name",
+            hover_data={
+                "channel_name": True,
+                "duration_minutes": ":.1f",
+                "count_snapshots": True,
                 "start_time": True,
-                "end_time_plus": True,
+                "end_time": True,
             },
-            custom_data=["Channel", "duration_min", "end_time_plus"],
-            title="Discord Voice Timeline – Heute (unabhängig vom Filter)",
         )
 
-        # Fixe X-Achse Mitternacht -> Mitternacht
         fig.update_layout(
-            xaxis=dict(
-                range=[start_day, end_day],
-                tickformat="%H:%M",
-                title="Uhrzeit",
-            ),
-            yaxis=dict(title="Nutzer"),
-            hoverlabel=dict(bgcolor="white"),
-            margin=dict(l=40, r=20, t=80, b=40),
+            title="Discord Voice Sessions – letzte 24h",
+            xaxis_title="Uhrzeit (UTC)",
+            yaxis_title="User",
+            margin=dict(l=10, r=10, t=60, b=10),
+            hovermode="closest",
+            legend_title="Channel",
         )
-        # Reihenfolge Nutzer nicht invertieren (Standard invertiert)
-        fig.update_yaxes(autorange="reversed")
-
-        # Dynamische Höhe
-        unique_users = plot_df["Nutzer"].nunique()
-        fig.update_layout(height=min(1600, max(320, 38 * unique_users + 120)))
-
-        # Benutzerdefiniertes Hover Template
-        fig.update_traces(
-            hovertemplate=(
-                "<b>%{y}</b><br>Channel: %{customdata[0]}<br>Start: %{x|%H:%M}"
-                "<br>Ende: %{customdata[2]|%H:%M}<br>Dauer: %{customdata[1]:.1f} Min<extra></extra>"
-            )
-        )
-
+        # X-Achse auf letzten 24h begrenzen, Tickformat nur Zeit
+        fig.update_xaxes(range=[cutoff, now_dt], tickformat="%H:%M", showgrid=True)
+        # Fixierte y-Achse (kein Zoomen per Scroll)
+        fig.update_yaxes(autorange="reversed")  # Timeline standardmäßig invertiert -> wieder invertieren für alphabetisch oben
         return fig
 
 
@@ -689,8 +676,6 @@ def create_app(database: Database):
     df_discord_voice_activity_initial = _load_df_discord_voice_activity(force=True)
     df_discord_voice_channels_initial = _load_df_discord_voice_channels(force=True)
     df_discord_game_activity_initial = _load_df_discord_game_activity(force=True)
-    # Heutige Voice Timeline (unabhängig vom DatePicker)
-    fig_voice_today = _build_today_voice_timeline()
 
     # Ermittlung globaler Min/Max-Datum für DatePicker
     from datetime import date, timedelta
@@ -1018,6 +1003,25 @@ def create_app(database: Database):
             ),
             html.Div(
                 [
+                    html.H2("Discord Voice Sessions – letzte 24h", id="hdr-voice-24h-timeline"),
+                    dcc.Graph(
+                        id="graph-voice-24h-timeline",
+                        figure=_build_voice_24h_timeline(),
+                        config={
+                            "displaylogo": False,
+                            "scrollZoom": False,
+                            "modeBarButtonsToRemove": [
+                                "zoom2d","pan2d","lasso2d","zoomIn2d","zoomOut2d","autoScale2d","resetScale2d"
+                            ],
+                        },
+                        style={"height": "600px"},
+                    ),
+                    dcc.Interval(id="interval-refresh-voice-24h", interval=300*1000, n_intervals=0),  # alle 5min
+                ],
+                style={"marginBottom": "2em"},
+            ),
+            html.Div(
+                [
                     html.H2("Nutzer–Spiel Netzwerk", id="hdr-user-game-network"),
                     dcc.Graph(
                         id="graph-user-game-network",
@@ -1044,30 +1048,6 @@ def create_app(database: Database):
                             "displayModeBar": True,
                         },
                         style={"height": "700px"},
-                    ),
-                ],
-                style={"marginBottom": "2em"},
-            ),
-            html.Div(
-                [
-                    html.H2("Heutige Discord Voice Timeline", id="hdr-voice-timeline-today"),
-                    dcc.Graph(
-                        id="graph-voice-timeline-today",
-                        figure=fig_voice_today,
-                        config={
-                            "displaylogo": False,
-                            "scrollZoom": False,
-                            "modeBarButtonsToRemove": [
-                                "zoom2d",
-                                "pan2d",
-                                "lasso2d",
-                                "zoomIn2d",
-                                "zoomOut2d",
-                                "autoScale2d",
-                                "resetScale2d",
-                            ],
-                        },
-                        style={"height": "750px"},
                     ),
                 ],
                 style={"marginBottom": "2em"},
@@ -1204,6 +1184,14 @@ def create_app(database: Database):
             fig_voice_user_network_f,
             recent_players_data,
         ]
+
+    # Separater Callback für 24h Voice Timeline (unabhängig vom DatePicker)
+    @app.callback(
+        Output("graph-voice-24h-timeline", "figure"),
+        Input("interval-refresh-voice-24h", "n_intervals")
+    )
+    def _refresh_voice_24h(_n):  # noqa: D401
+        return _build_voice_24h_timeline()
 
     return app
 
