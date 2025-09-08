@@ -11,7 +11,7 @@ from steam_web_api import Steam
 
 from collector import DataCollector
 from config import LOGGING_LEVEL, DISCORD_API_TOKEN, DISCORD_STATS_ENABLED, STEAM_API_KEY, DATA_COLLECTION_INTERVAL, \
-    DEBUG_MODE
+    DEBUG_MODE, PORT, HOST
 from current_events import CurrentEventFetcher
 from db import Database
 from discord_bot import DiscordClient
@@ -131,7 +131,7 @@ async def main():
     database = Database()
     # Starte Webserver für Statistiken
     from web_server import run_webserver
-    run_webserver(database)
+    run_webserver(database, host=HOST, port=PORT)
 
     data = get_data()
     intents = discord.Intents.default()
