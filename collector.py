@@ -33,7 +33,7 @@ class DataCollector:
                             self.db.insert_discord_voice_activity(timestamp,str(member.id), channel.name, str(guild.id))
                             if member.activity:
                                 logging.info(f"User {member.name} is playing {member.activity}")
-                                logging.info(f"Activity details: {member.activity.name}, {member.activity.type}, {member.activity.state}, {member.activity.details} {member.activity.application_id}")
+                                logging.info(f"Activity details: {member.activity.name}, {member.activity.type}, {member.activity.state}, {member.activity.application_id}")
                                 self.db.insert_discord_game_activity(timestamp,str(member.id), str(member.activity))
                     if user_count > 0:
                         self.db.insert_discord_voice_channel(timestamp,

@@ -68,17 +68,45 @@ def get_user_discord_ids(data: Dict[str, Any]) -> List[Dict[str, str]]:
     logging.debug(f"Extracted user Discord IDs: {discord_ids}")
     return discord_ids
 
-def get_user_birthdays(data: Dict[str, Any]) -> List[Dict[str, str]]:
-    """
-    Get user birthdays from the JSON data.
+def get_user_birthdays(data: Dict[str, Any]) -> List[Dict[str, datetime]]:
+    """Extrahiere Nutzer-Geburtstage.
 
-    :param data: Parsed JSON data.
-    :return: List of dictionaries containing user IDs and birthdays.
+    Leere Strings, None oder offensichtlich ungültige Formate werden übersprungen.
+    Erwartetes Format: DD-MM-YYYY. (Vorhandene alte Einträge mit YYYY-MM-DD könnten optional später ergänzt werden.)
     """
     people = data.get("people", [])
-    birthdays = [{"name": person["name"], "birthday": datetime.strptime(person["birthday"], "%d-%m-%Y")} for person in people if "birthday" in person]
-    logging.debug(f"Extracted user birthdays: {birthdays}")
-    return birthdays
+    results: List[Dict[str, datetime]] = []
+    for person in people:
+        raw = person.get("birthday")
+        if not raw:
+            # leer / None -> überspringen
+            continue
+        if isinstance(raw, str):
+            raw_str = raw.strip()
+            if not raw_str:
+                continue
+            # Validierung: genau 2 '-' Trenner erwartet
+            parts = raw_str.split('-')
+            if len(parts) != 3:
+                logging.warning(f"Skip birthday with unexpected format (parts!=3): {raw_str} for user {person.get('name')}")
+                continue
+            # Versuch zu parsen
+            parsed = None
+            for fmt in ("%d-%m-%Y", "%Y-%m-%d"):
+                try:
+                    parsed = datetime.strptime(raw_str, fmt)
+                    break
+                except ValueError:
+                    continue
+            if not parsed:
+                logging.warning(f"Skip birthday with invalid date: {raw_str} for user {person.get('name')}")
+                continue
+            results.append({"name": person.get("name", ""), "birthday": parsed})
+        else:
+            logging.warning(f"Skip non-string birthday value: {raw} for user {person.get('name')}")
+            continue
+    logging.debug(f"Extracted user birthdays (valid count={len(results)}): {results}")
+    return results
 
 def get_user_data(data: Dict[str, Any]) -> List[Dict[str, str]]:
     """
