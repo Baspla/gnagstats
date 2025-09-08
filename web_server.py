@@ -24,5 +24,6 @@ def create_app(database):
 
 def run_webserver(database, host="127.0.0.1", port=5000):
     app = create_app(database)
-    logging.info(f"Starting web server at http://{host}:{port}/")
-    threading.Thread(target=app.run, kwargs={"host": host, "port": port, "debug": False}, daemon=True).start()  
+    logging.info(f"Starting production web server at http://{host}:{port}/ using Waitress.")
+    from waitress import serve
+    threading.Thread(target=serve, args=(app,), kwargs={"host": host, "port": port}, daemon=True).start()
