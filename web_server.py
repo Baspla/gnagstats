@@ -429,7 +429,6 @@ def create_app(database: Database):
     if not daily_no_gap.empty and "total_hours" in daily_no_gap.columns:
         daily_no_gap.loc[daily_no_gap["total_hours"] <= 0, "total_hours"] = None
     fig_line = px.bar(daily_no_gap, x="date", y="total_hours")
-    fig_line.update_traces(connectgaps=False)
     # Nur horizontale Auswahl erlauben (Selection entlang X), vertikale Achse fix
     fig_line.update_layout(dragmode="select", selectdirection="h")
     fig_line.update_yaxes(fixedrange=True)
