@@ -41,3 +41,5 @@ jobs:
             ghcr.io/baspla/gnagstats:latest
             ghcr.io/baspla/gnagstats:${{ github.sha }}
           platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,scope=gnagstats
+          cache-to: type=gha,mode=max,scope=gnagstats
