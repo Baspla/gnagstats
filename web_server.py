@@ -840,6 +840,15 @@ def create_app(database: Database):
                 ],
                 style={"marginBottom": "2em"},
             ),
+            # Live-Abschnitt: Aktuell gespielte Steam-Spiele (letzte 5,5 Minuten)
+            dcc.Interval(id="interval-current-steam", interval=300_000, n_intervals=0),  # 5 Minuten
+            html.Div(
+                [
+                    html.H2("Currently Gaming", id="hdr-current-steam"),
+                    html.Div(id="div-current-steam-games", children="Lade ...")
+                ],
+                style={"marginBottom": "2em"},
+            ),
         ],
         style={"fontFamily": "Arial, sans-serif", "margin": "2em"},
     )
@@ -966,6 +975,64 @@ def create_app(database: Database):
             fig_network_f,
             fig_voice_user_network_f,
         ]
+
+    # Callback für Live-Anzeige aktuell gespielter Steam-Spiele (letzte 5,5 Minuten)
+    from dash import Input, Output
+    @app.callback(
+        Output("div-current-steam-games", "children"),
+        Input("interval-current-steam", "n_intervals"),
+        prevent_initial_call=False,
+    )
+    def _update_current_steam_games(_n):  # noqa: D401
+        now = int(time.time())
+        # Forciertes Reload um frische Daten für den Live-Bereich zu bekommen
+        df = _load_df_steam_game_activity(force=True)
+        if df.empty:
+            return "Keine Daten vorhanden."
+        # Fallback falls user_name Spalte fehlt
+        if "user_name" not in df.columns:
+            df["user_name"] = df["steam_id"].astype(str)
+        # Filter: letzte 5,5 Minuten (330s)
+        recent = df[df["timestamp"] >= now - 330]
+        if recent.empty:
+            return "Niemand spielt (innerhalb der letzten 5,5 Minuten)."
+        # Neueste Einträge pro Nutzer (Spiel kann variieren)
+        recent_sorted = recent.sort_values("timestamp", ascending=False)
+        latest_per_user = recent_sorted.groupby("user_name", as_index=False).first()
+        latest_per_user["minutes_ago"] = (now - latest_per_user["timestamp"]) / 60.0
+
+        # Sortiere nach zuletzt gesehen
+        latest_per_user = latest_per_user.sort_values("minutes_ago")
+
+        # Baue einfache Tabelle
+        header = ["Nutzer", "Spiel", "Vor (Minuten)"]
+        import math
+        rows = []
+        for _, row in latest_per_user.iterrows():
+            minutes_ago = row["minutes_ago"]
+            # Rundung auf 1 Nachkommastelle, aber sehr kleine Werte auf <0.1
+            if minutes_ago < 0.1:
+                minutes_str = "<0.1"
+            else:
+                minutes_str = f"{minutes_ago:.1f}"
+            rows.append([str(row["user_name"]), str(row["game_name"]), minutes_str])
+
+        table = html.Table(
+            [
+                html.Thead(html.Tr([html.Th(col) for col in header])),
+                html.Tbody([
+                    html.Tr([html.Td(cell) for cell in r]) for r in rows
+                ])
+            ],
+            style={
+                "borderCollapse": "collapse",
+                "width": "100%",
+                "fontFamily": "monospace",
+            }
+        )
+        # Ein wenig Styling per CSS inline
+        # (Alternativ könnte man DataTable benutzen, aber hier ausreichend simpel)
+        return table
 
     return app
 
