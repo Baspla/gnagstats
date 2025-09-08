@@ -12,11 +12,11 @@ from config import WEB_CACHE_TTL_MINUTES, JSON_DATA_PATH
 
 def create_app(database: Database):
     """Create a Dash app with dedicated web queries and rich visualizations."""
-    from dash import Dash, html, dcc, Input, Output, State
+    from dash import Dash, html, dcc
     import plotly.express as px
 
     # Initialize Dash app (Flask server accessible via app.server)
-    app = Dash(__name__, title="GNAG Stats – Übersicht")
+    app = Dash(__name__, title="Gnag Stats")
 
     # Cached DataFrame and last refresh timestamp
     df_cache: Optional[pd.DataFrame] = None
@@ -101,86 +101,75 @@ def create_app(database: Database):
         hourly["total_hours"] = hourly["total_minutes"] / 60.0
         return hourly.sort_values("hour_of_day")
 
+    # Build figures once at load time (no auto-refresh)
+    df_initial = _load_dataframe(force=True)
+
+    # 1) Bar: playtime per game
+    per_game = _agg_playtime_per_game(df_initial)
+    fig_bar = px.bar(per_game.head(40), x="total_hours_played", y="game_name", orientation="h", color="game_name")
+    fig_bar.update_layout(showlegend=False, xaxis_title="Stunden", yaxis_title="Spiel")
+
+    # 2) Line: total time per day
+    daily = _agg_daily_hours(df_initial)
+    fig_line = px.line(daily, x="date", y="total_hours")
+    fig_line.update_layout(xaxis_title="Datum", yaxis_title="Stunden pro Tag")
+
+    # 3) Heatmap user vs top games
+    heat = _agg_heatmap_user_top_games(df_initial)
+    if heat.empty:
+        fig_heat = px.imshow([[0]], labels=dict(x="Spiel", y="Nutzer", color="Stunden"))
+        fig_heat.update_xaxes(visible=False)
+        fig_heat.update_yaxes(visible=False)
+    else:
+        fig_heat = px.imshow(
+            heat.values,
+            x=list(heat.columns),
+            y=list(heat.index),
+            color_continuous_scale="YlGnBu",
+            aspect="auto",
+            labels=dict(color="Stunden"),
+        )
+        fig_heat.update_layout(xaxis_title="Spiel", yaxis_title="Nutzer")
+
+    # 4) Vertical bar: hours by hour of day
+    by_hour = _agg_hours_by_hour_of_day(df_initial)
+    fig_hour = px.bar(by_hour, x="hour_of_day", y="total_hours")
+    fig_hour.update_layout(xaxis_title="Stunde (0-23)", yaxis_title="Stunden")
+
     app.layout = html.Div(
         [
             html.H1("GNAG Stats – Übersicht"),
             html.Div(
                 [
                     html.H2("Spielzeit pro Spiel (Balken)"),
-                    dcc.Graph(id="graph-playtime-per-game"),
+                    dcc.Graph(id="graph-playtime-per-game", figure=fig_bar),
                 ],
                 style={"marginBottom": "2em"},
             ),
             html.Div(
                 [
                     html.H2("Gesamtzeit pro Tag (Linie)", id="hdr-daily"),
-                    dcc.Graph(id="graph-daily-time"),
+                    dcc.Graph(id="graph-daily-time", figure=fig_line),
                 ],
                 style={"marginBottom": "2em"},
             ),
             html.Div(
                 [
                     html.H2("Heatmap: Spielzeit Nutzer vs. Top-Spiele"),
-                    dcc.Graph(id="graph-heatmap-user-game"),
+                    dcc.Graph(id="graph-heatmap-user-game", figure=fig_heat),
                 ],
                 style={"marginBottom": "2em"},
             ),
             html.Div(
                 [
                     html.H2("Spielzeit nach Tagesstunde (Balken)"),
-                    dcc.Graph(id="graph-by-hour"),
+                    dcc.Graph(id="graph-by-hour", figure=fig_hour),
                 ],
                 style={"marginBottom": "2em"},
             ),
         ],
         style={"fontFamily": "Arial, sans-serif", "margin": "2em"},
     )
-
-    @app.callback(
-        Output("graph-playtime-per-game", "figure"),
-        Output("graph-daily-time", "figure"),
-        Output("graph-heatmap-user-game", "figure"),
-        Output("graph-by-hour", "figure"),
-        Output("status-text", "children"),
-        prevent_initial_call=False,
-    )
-    def _refresh_graphs():  # noqa: D401
-        df = _load_dataframe(force=_clicks and _clicks > 0)
-
-        # 1) Bar: playtime per game
-        per_game = _agg_playtime_per_game(df)
-        fig_bar = px.bar(per_game.head(40), x="total_hours_played", y="game_name", orientation="h", color="game_name")
-        fig_bar.update_layout(showlegend=False, xaxis_title="Stunden", yaxis_title="Spiel")
-
-        # 2) Line: total time per day
-        daily = _agg_daily_hours(df)
-        fig_line = px.line(daily, x="date", y="total_hours")
-        fig_line.update_layout(xaxis_title="Datum", yaxis_title="Stunden pro Tag")
-
-        # 3) Heatmap user vs top games
-        heat = _agg_heatmap_user_top_games(df)
-        if heat.empty:
-            fig_heat = px.imshow([[0]], labels=dict(x="Spiel", y="Nutzer", color="Stunden"))
-            fig_heat.update_xaxes(visible=False)
-            fig_heat.update_yaxes(visible=False)
-        else:
-            fig_heat = px.imshow(
-                heat.values,
-                x=list(heat.columns),
-                y=list(heat.index),
-                color_continuous_scale="YlGnBu",
-                aspect="auto",
-                labels=dict(color="Stunden"),
-            )
-            fig_heat.update_layout(xaxis_title="Spiel", yaxis_title="Nutzer")
-
-        # 4) Vertical bar: hours by hour of day
-        by_hour = _agg_hours_by_hour_of_day(df)
-        fig_hour = px.bar(by_hour, x="hour_of_day", y="total_hours")
-        fig_hour.update_layout(xaxis_title="Stunde (0-23)", yaxis_title="Stunden")
-
-        status = f"Zuletzt geladen: {time.strftime('%Y-%m-%d %H:%M:%S')} – Zeilen: {len(df)} – Cache: {WEB_CACHE_TTL_MINUTES} min"
-        return fig_bar, fig_line, fig_heat, fig_hour, status
 
     return app
 
