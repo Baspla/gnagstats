@@ -598,22 +598,14 @@ def create_app(database: Database):
             ),
             html.Div(
                 [
-                    html.H2("Nutzer–Spiel Netzwerk (gewichtete Kanten)", id="hdr-user-game-network"),
+                    html.H2("Nutzer–Spiel Netzwerk", id="hdr-user-game-network"),
                     dcc.Graph(
                         id="graph-user-game-network",
                         figure=fig_network,
                         config={
                             "displaylogo": False,
                             "scrollZoom": False,
-                            "modeBarButtonsToRemove": [
-                                "zoom2d",
-                                "pan2d",
-                                "lasso2d",
-                                "zoomIn2d",
-                                "zoomOut2d",
-                                "autoScale2d",
-                                "resetScale2d",
-                            ],
+                            "displayModeBar": True,
                         },
                         style={"height": "700px"},
                     ),
