@@ -237,6 +237,9 @@ def create_app(database: Database):
         daily_no_gap.loc[daily_no_gap["total_hours"] <= 0, "total_hours"] = None
     fig_line = px.line(daily_no_gap, x="date", y="total_hours")
     fig_line.update_traces(connectgaps=False)
+    # Nur horizontale Auswahl erlauben (Selection entlang X), vertikale Achse fix
+    fig_line.update_layout(dragmode="select", selectdirection="h")
+    fig_line.update_yaxes(fixedrange=True)
     fig_line.update_layout(xaxis_title="Datum", yaxis_title="Stunden pro Tag")
 
     # 3) Heatmap user vs top games
@@ -255,16 +258,25 @@ def create_app(database: Database):
             labels=dict(color="Stunden"),
         )
         fig_heat.update_layout(xaxis_title="Spiel", yaxis_title="Nutzer")
+    # Heatmap: kein Zoom/Selection
+    fig_heat.update_xaxes(fixedrange=True)
+    fig_heat.update_yaxes(fixedrange=True)
 
     # 4) Vertical bar: hours by hour of day
     by_hour = _agg_hours_by_hour_of_day(df_steam_game_activity_initial)
     fig_hour = px.bar(by_hour, x="hour_of_day", y="total_hours")
+    # Nur horizontale Auswahl erlauben (Selection entlang X), vertikale Achse fix
+    fig_hour.update_layout(dragmode="select", selectdirection="h")
+    fig_hour.update_yaxes(fixedrange=True)
     fig_hour.update_layout(xaxis_title="Stunde (0-23)", yaxis_title="Stunden")
 
     # 5) Punkte: Tages-Peaks der Gesamtnutzer in Sprachkanälen
     voice_users_daily_peak = _agg_daily_peak_voice_users(df_discord_voice_channels_initial)
     fig_voice_users = px.scatter(voice_users_daily_peak, x="date", y="total_users")
     fig_voice_users.update_traces(mode="markers", marker=dict(size=7))
+    # Nur horizontale Auswahl erlauben (Selection entlang X), vertikale Achse fix
+    fig_voice_users.update_layout(dragmode="select", selectdirection="h")
+    fig_voice_users.update_yaxes(fixedrange=True)
     fig_voice_users.update_layout(xaxis_title="Datum", yaxis_title="Peak Nutzer/Tag")
 
     app.layout = html.Div(
@@ -299,28 +311,93 @@ def create_app(database: Database):
             html.Div(
                 [
                     html.H2("Gesamtzeit pro Tag", id="hdr-daily"),
-                    dcc.Graph(id="graph-daily-time", figure=fig_line),
+                    dcc.Graph(
+                        id="graph-daily-time",
+                        figure=fig_line,
+                        config={
+                            "displaylogo": False,
+                            "scrollZoom": False,
+                            "modeBarButtonsToRemove": [
+                                "zoom2d",
+                                "pan2d",
+                                "lasso2d",
+                                "zoomIn2d",
+                                "zoomOut2d",
+                                "autoScale2d",
+                                "resetScale2d",
+                            ],
+                        },
+                    ),
                 ],
                 style={"marginBottom": "2em"},
             ),
             html.Div(
                 [
                     html.H2("Spielzeit Nutzer vs. Top-Spiele", id="hdr-heatmap-user-game"),
-                    dcc.Graph(id="graph-heatmap-user-game", figure=fig_heat),
+                    dcc.Graph(
+                        id="graph-heatmap-user-game",
+                        figure=fig_heat,
+                        config={
+                            "displaylogo": False,
+                            "scrollZoom": False,
+                            "modeBarButtonsToRemove": [
+                                "zoom2d",
+                                "pan2d",
+                                "select2d",
+                                "lasso2d",
+                                "zoomIn2d",
+                                "zoomOut2d",
+                                "autoScale2d",
+                                "resetScale2d",
+                            ],
+                        },
+                    ),
                 ],
                 style={"marginBottom": "2em"},
             ),
             html.Div(
                 [
                     html.H2("Spielzeit nach Tagesstunde", id="hdr-by-hour"),
-                    dcc.Graph(id="graph-by-hour", figure=fig_hour),
+                    dcc.Graph(
+                        id="graph-by-hour",
+                        figure=fig_hour,
+                        config={
+                            "displaylogo": False,
+                            "scrollZoom": False,
+                            "modeBarButtonsToRemove": [
+                                "zoom2d",
+                                "pan2d",
+                                "lasso2d",
+                                "zoomIn2d",
+                                "zoomOut2d",
+                                "autoScale2d",
+                                "resetScale2d",
+                            ],
+                        },
+                    ),
                 ],
                 style={"marginBottom": "2em"},
             ),
             html.Div(
                 [
                     html.H2("Tages-Peaks der Gesamtnutzer in Sprachkanälen", id="hdr-voice-users-over-time"),
-                    dcc.Graph(id="graph-voice-users-over-time", figure=fig_voice_users),
+                    dcc.Graph(
+                        id="graph-voice-users-over-time",
+                        figure=fig_voice_users,
+                        config={
+                            "displaylogo": False,
+                            "scrollZoom": False,
+                            "modeBarButtonsToRemove": [
+                                "zoom2d",
+                                "pan2d",
+                                "lasso2d",
+                                "zoomIn2d",
+                                "zoomOut2d",
+                                "autoScale2d",
+                                "resetScale2d",
+                            ],
+                        },
+                    ),
                 ],
                 style={"marginBottom": "2em"},
             ),
