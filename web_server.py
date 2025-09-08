@@ -797,12 +797,13 @@ def create_app(database: Database):
             ),
             html.Div(
                 [
-                    html.H2("Spielzeit nach Tagesstunde", id="hdr-by-hour"),
+                    # Flex-Container mit zwei Spalten: Links aktive Gamer Tabelle, rechts Titel + Graph
                     html.Div(
                         [
+                            # Linke Spalte: Aktive Gamer
                             html.Div(
                                 [
-                                    html.H4("Aktive Gamer", style={"marginTop": 0}),
+                                    html.H2("Aktive Gamer", style={"marginTop": 0}),
                                     dash_table.DataTable(
                                         id="table-recent-players",
                                         columns=[
@@ -835,35 +836,45 @@ def create_app(database: Database):
                                     "flexDirection": "column",
                                 },
                             ),
+                            # Rechte Spalte: Titel
                             html.Div(
-                                dcc.Graph(
-                                    id="graph-by-hour",
-                                    figure=fig_hour,
-                                    config={
-                                        "displaylogo": False,
-                                        "scrollZoom": False,
-                                        "modeBarButtonsToRemove": [
-                                            "zoom2d",
-                                            "pan2d",
-                                            "lasso2d",
-                                            "zoomIn2d",
-                                            "zoomOut2d",
-                                            "autoScale2d",
-                                            "resetScale2d",
-                                        ],
-                                    },
-                                ),
-                                style={"flex": "1", "minWidth": 0},
+                                [
+                                    html.H2("Spielzeit nach Tagesstunde", id="hdr-by-hour", style={"marginTop": 0}),
+                                    dcc.Graph(
+                                        id="graph-by-hour",
+                                        figure=fig_hour,
+                                        config={
+                                            "displaylogo": False,
+                                            "scrollZoom": False,
+                                            "modeBarButtonsToRemove": [
+                                                "zoom2d",
+                                                "pan2d",
+                                                "lasso2d",
+                                                "zoomIn2d",
+                                                "zoomOut2d",
+                                                "autoScale2d",
+                                                "resetScale2d",
+                                            ],
+                                        },
+                                    ),
+                                ],
+                                style={
+                                    "flex": "1",
+                                    "minWidth": 0,
+                                    "display": "flex",
+                                    "flexDirection": "column",
+                                    "gap": "0.5rem",
+                                },
                             ),
                         ],
                         style={
                             "display": "flex",
                             "gap": "1rem",
                             "alignItems": "stretch",
+                            "marginBottom": "2em",
                         },
                     ),
-                ],
-                style={"marginBottom": "2em"},
+                ]
             ),
             html.Div(
                 [
