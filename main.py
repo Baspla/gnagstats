@@ -129,6 +129,10 @@ async def core_loop(collector, newsletter_creator):
 async def main():
     setup_logging()
     database = Database()
+    # Starte Webserver für Statistiken
+    from web_server import run_webserver
+    run_webserver(database)
+
     data = get_data()
     intents = discord.Intents.default()
     intents.members = True

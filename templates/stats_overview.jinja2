@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Statistik-Übersicht</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        h1 { color: #2c3e50; }
+        section { margin-bottom: 2em; }
+        table { border-collapse: collapse; width: 100%; margin-top: 1em; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background: #f4f4f4; }
+    </style>
+</head>
+<body>
+    <h1>Statistik-Übersicht</h1>
+    <section>
+        <h2>Meistgespielte Steam-Spiele (letzte 7 Tage)</h2>
+        {% if steam_most_played %}
+        <table>
+            <tr><th>Spiel</th><th>Sessions</th></tr>
+            {% for name, count in steam_most_played %}
+            <tr><td>{{ name }}</td><td>{{ count }}</td></tr>
+            {% endfor %}
+        </table>
+        {% else %}<p>Keine Daten.</p>{% endif %}
+    </section>
+    <section>
+        <h2>Aktivste Discord-Voice-Channels (letzte 7 Tage)</h2>
+        {% if discord_busiest_channels %}
+        <table>
+            <tr><th>Channel</th><th>Gesamte Nutzer</th></tr>
+            {% for name, count in discord_busiest_channels %}
+            <tr><td>{{ name }}</td><td>{{ count }}</td></tr>
+            {% endfor %}
+        </table>
+        {% else %}<p>Keine Daten.</p>{% endif %}
+    </section>
+</body>
+</html>
