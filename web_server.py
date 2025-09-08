@@ -472,7 +472,7 @@ def create_app(database: Database):
     fig_voice_users.update_layout(xaxis_title="Datum", yaxis_title="Peak Nutzer/Tag")
 
     # 6) Netzwerkgraph: Nutzer <-> Spiele
-    fig_network = _build_user_game_network(df_steam_game_activity_initial, min_game_hours=20.0)
+    fig_network = _build_user_game_network(df_steam_game_activity_initial, min_game_hours=0.0)
 
     app.layout = html.Div(
         [
