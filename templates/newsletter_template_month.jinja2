@@ -7,8 +7,6 @@ Diesen Monat war niemand in einem Voice Channel. 🤐
 Es war nur einmal jemand diesen Monat da. 🙃
 {% else %}
 Insgesamt waren **{{ discord_users_voice }} Leute** aktiv in den Voice Channels und haben **{{ discord_time_voice|seconds_to_human_readable }}** miteinander gesprochen. 👥
-{% set uv_trend = '↗️' if discord_users_voice_change_pct > 0 else ('↘️' if discord_users_voice_change_pct < 0 else '➡️') %}
-({{ uv_trend }} {{ discord_users_voice_change_pct|round(1) }}% zum Vormonat)
 {% endif %}
 {% if discord_time_alone|seconds_to_human_readable != "0 Minuten" %}
 Für ganze **{{ discord_time_alone|seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel. 😔
@@ -25,8 +23,6 @@ Die meistgespielten Spiele diesen Monat:
 {% for game in steam_most_played_list_capped %}
 - {{ game[0] }} - {{ game[1]|seconds_to_human_readable }}
 {% endfor %}
-{% set sp_trend = '↗️' if steam_most_played_list_change_pct > 0 else ('↘️' if steam_most_played_list_change_pct < 0 else '➡️') %}
-({{ sp_trend }} {{ steam_most_played_list_change_pct|round(1) }}% zum Vormonat)
 {% endif %}
 
 {% if steam_most_played_together_list_capped is none or steam_most_played_together_list_capped|length == 0 %}
@@ -36,8 +32,6 @@ Diese Spiele wurden am häufigsten gemeinsam gezockt:
 {% for game in steam_most_played_together_list_capped %}
 - {{ game[0] }} - {{ game[1]|seconds_to_human_readable }}
 {% endfor %}
-{% set spt_trend = '↗️' if steam_most_played_together_list_change_pct > 0 else ('↘️' if steam_most_played_together_list_change_pct < 0 else '➡️') %}
-({{ spt_trend }} {{ steam_most_played_together_list_change_pct|round(1) }}% zum Vormonat)
 {% endif %}
 ### **Was geht grade ab?** 📅
 {% if discord_active_events|length == 0 %}

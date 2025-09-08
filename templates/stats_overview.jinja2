@@ -18,12 +18,12 @@
         <h2>Meistgespielte Steam-Spiele (letzte 7 Tage)</h2>
         {% if steam_most_played %}
         <table>
-                <tr><th>Spiel</th><th>Spielzeit</th></tr>
-                {% for entry in steam_most_played %}
-                <tr>
-                    <td>{{ entry[0] if entry is iterable and entry is not string else entry.game_name if entry.game_name is defined else entry }}</td>
-                    <td>{{ seconds_to_human_readable(entry[2] if entry is iterable and entry|length > 2 else entry.total_playtime if entry.total_playtime is defined else entry[1] if entry|length > 1 else 0) }}</td>
-                </tr>
+            <tr><th>Spiel</th><th>Gespielte Zeit</th></tr>
+            {% for entry in steam_most_played %}
+            <tr>
+                <td>{{ entry[0] }}</td>
+                <td>{{ entry[2]|seconds_to_human_readable }}</td>
+            </tr>
             {% endfor %}
         </table>
         {% else %}<p>Keine Daten.</p>{% endif %}
@@ -32,12 +32,9 @@
         <h2>Aktivste Discord-Voice-Channels (letzte 7 Tage)</h2>
         {% if discord_busiest_channels %}
         <table>
-                <tr><th>Channel</th><th>Gesamte Nutzer</th></tr>
-                {% for entry in discord_busiest_channels %}
-                <tr>
-                    <td>{{ entry[0] if entry is iterable and entry is not string else entry.channel_name if entry.channel_name is defined else entry }}</td>
-                    <td>{{ seconds_to_human_readable(entry[1] if entry is iterable and entry|length > 1 else entry.total_voicetime if entry.total_voicetime is defined else 0) }}</td>
-                </tr>
+            <tr><th>Channel</th><th>Gesamte Nutzer</th></tr>
+            {% for name, count in discord_busiest_channels %}
+            <tr><td>{{ name }}</td><td>{{ count }}</td></tr>
             {% endfor %}
         </table>
         {% else %}<p>Keine Daten.</p>{% endif %}

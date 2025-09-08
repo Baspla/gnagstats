@@ -10,15 +10,26 @@ def create_app(database):
     @app.route("/")
     def stats():
         import time
+        from jinja2 import Environment, FileSystemLoader
+        from newsletter_creator import datetime_to_timestamp, timesteps_to_human_readable, seconds_to_human_readable
         now = int(time.time())
         week_ago = now - 7*24*3600
-        # Steam: meistgespielte Spiele
         steam_most_played = database.get_steam_most_played_games(week_ago, now)
-        # Discord: aktivste Voice-Channels
         discord_busiest_channels = database.get_discord_busiest_voice_channels(week_ago, now)
-        return render_template("stats_overview.jinja2",
-                              steam_most_played=steam_most_played,
-                              discord_busiest_channels=discord_busiest_channels)
+
+        env = Environment(loader=FileSystemLoader('templates'),
+                          autoescape=True,
+                          trim_blocks=True,
+                          lstrip_blocks=True)
+        env.filters['datetime_to_timestamp'] = datetime_to_timestamp
+        env.filters['seconds_to_human_readable'] = seconds_to_human_readable
+        template = env.get_template('stats_overview.jinja2')
+
+        rendered = template.render(
+            steam_most_played=steam_most_played,
+            discord_busiest_channels=discord_busiest_channels
+        )
+        return rendered
 
     return app
 
