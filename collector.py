@@ -44,17 +44,14 @@ class DataCollector:
                 for member in guild.members:
                     if str(member.id) in self.data["user_discord_ids"]:
                         if member.activity:
-                            logging.debug(f"User {member.name} discord activity details: {member.activity}")
-                            activity_attrs = [
-                                "name", "type", "state", "application_id", "details", "url", "start", "end", "game", "flags", "party", "platform"
-                            ]
-                            for attr in activity_attrs:
-                                try:
-                                    value = getattr(member.activity, attr, None)
-                                    logging.debug(f"discord activity attribute '{attr}': {value}")
-                                except Exception as e:
-                                    logging.debug(f"Error getting discord activity attribute '{attr}': {e}")
-                            self.db.insert_discord_game_activity(timestamp, str(member.id), str(member.activity))
+                            if member.activity.type == ActivityType.playing:
+                                logging.debug(f"User {member.name} discord activity details: {member.activity}")
+                                activity_attrs = [
+                                    "name", "type", "state", "application_id", "details", "url", "start", "end", "game", "flags", "party", "platform"
+                                ]
+                                self.db.insert_discord_game_activity(timestamp, str(member.id), str(member.activity))
+                            else:
+                                logging.debug(f"User {member.name} activity is not of type 'playing': {member.activity.type}")
         pass
 
     async def collect_steam_data(self):
