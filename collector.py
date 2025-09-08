@@ -33,18 +33,6 @@ class DataCollector:
                             logging.debug(f"Tracking user {member.name} (ID: {member.id}) in channel {channel.name}.")
                             self.db.insert_discord_voice_activity(timestamp,str(member.id), channel.name, str(guild.id))
                             logging.debug(f"User {member.name} is playing {member.activity if member.activity else 'No Activity'}")
-                            if member.activity:
-                                logging.debug(f"SEARCHABLE User {member.name} activity details: {member.activity}")
-                                activity_attrs = [
-                                    "name", "type", "state", "application_id", "details", "url", "start", "end", "game","flags","party","platform"
-                                ]
-                                for attr in activity_attrs:
-                                    try:
-                                        value = getattr(member.activity, attr, None)
-                                        logging.debug(f"SEARCHABLE Activity attribute '{attr}': {value}")
-                                    except Exception as e:
-                                        logging.error(f"Error getting activity attribute '{attr}': {e}")
-                                self.db.insert_discord_game_activity(timestamp,str(member.id), str(member.activity))
                     if user_count > 0:
                         self.db.insert_discord_voice_channel(timestamp,
                             channel.name,
@@ -52,6 +40,21 @@ class DataCollector:
                             user_count,
                             tracked_users
                         )
+                # Separater Loop für Aktivitätstracking aller getrackten Nutzer (unabhängig von Voice-Channel)
+                for member in guild.members:
+                    if str(member.id) in self.data["user_discord_ids"]:
+                        if member.activity:
+                            logging.debug(f"User {member.name} discord activity details: {member.activity}")
+                            activity_attrs = [
+                                "name", "type", "state", "application_id", "details", "url", "start", "end", "game", "flags", "party", "platform"
+                            ]
+                            for attr in activity_attrs:
+                                try:
+                                    value = getattr(member.activity, attr, None)
+                                    logging.debug(f"discord activity attribute '{attr}': {value}")
+                                except Exception as e:
+                                    logging.debug(f"Error getting discord activity attribute '{attr}': {e}")
+                            self.db.insert_discord_game_activity(timestamp, str(member.id), str(member.activity))
         pass
 
     async def collect_steam_data(self):
