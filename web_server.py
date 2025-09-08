@@ -198,6 +198,16 @@ def create_app(database: Database):
         )
         return aggregated
 
+    def _agg_daily_peak_voice_users(df: pd.DataFrame) -> pd.DataFrame:
+        """Tages-Peak der Gesamtnutzer in Sprachkanälen (Max je Tag)."""
+        per_ts = _agg_total_voice_users_over_time(df)
+        if per_ts.empty:
+            return pd.DataFrame(columns=["date", "total_users"])
+        tmp = per_ts.copy()
+        tmp["date"] = tmp["timestamp_dt"].dt.floor("D")
+        daily_peak = tmp.groupby("date")["total_users"].max().reset_index()
+        return daily_peak.sort_values("date")
+
     # Build figures once at load time (no auto-refresh)
     df_steam_game_activity_initial = _load_df_steam_game_activity(force=True)
     # Preload other DataFrames as well
@@ -221,7 +231,12 @@ def create_app(database: Database):
 
     # 2) Line: total time per day
     daily = _agg_daily_hours(df_steam_game_activity_initial)
-    fig_line = px.line(daily, x="date", y="total_hours")
+    # Lücken nicht auf 0 zeichnen: 0-Stunden auf None setzen, damit die Linie unterbrochen wird
+    daily_no_gap = daily.copy()
+    if not daily_no_gap.empty and "total_hours" in daily_no_gap.columns:
+        daily_no_gap.loc[daily_no_gap["total_hours"] <= 0, "total_hours"] = None
+    fig_line = px.line(daily_no_gap, x="date", y="total_hours")
+    fig_line.update_traces(connectgaps=False)
     fig_line.update_layout(xaxis_title="Datum", yaxis_title="Stunden pro Tag")
 
     # 3) Heatmap user vs top games
@@ -246,11 +261,11 @@ def create_app(database: Database):
     fig_hour = px.bar(by_hour, x="hour_of_day", y="total_hours")
     fig_hour.update_layout(xaxis_title="Stunde (0-23)", yaxis_title="Stunden")
 
-    # 5) Line: Gesamtanzahl Nutzer in Sprachkanälen über die Zeit
-    voice_users_over_time = _agg_total_voice_users_over_time(df_discord_voice_channels_initial)
-    fig_voice_users = px.scatter(voice_users_over_time, x="timestamp_dt", y="total_users")
-    fig_voice_users.update_traces(mode="markers", marker=dict(size=6))
-    fig_voice_users.update_layout(xaxis_title="Zeit", yaxis_title="Gesamtnutzer in Sprachkanälen")
+    # 5) Punkte: Tages-Peaks der Gesamtnutzer in Sprachkanälen
+    voice_users_daily_peak = _agg_daily_peak_voice_users(df_discord_voice_channels_initial)
+    fig_voice_users = px.scatter(voice_users_daily_peak, x="date", y="total_users")
+    fig_voice_users.update_traces(mode="markers", marker=dict(size=7))
+    fig_voice_users.update_layout(xaxis_title="Datum", yaxis_title="Peak Nutzer/Tag")
 
     app.layout = html.Div(
         [
@@ -304,7 +319,7 @@ def create_app(database: Database):
             ),
             html.Div(
                 [
-                    html.H2("Gesamtnutzer in Sprachkanälen", id="hdr-voice-users-over-time"),
+                    html.H2("Tages-Peaks der Gesamtnutzer in Sprachkanälen", id="hdr-voice-users-over-time"),
                     dcc.Graph(id="graph-voice-users-over-time", figure=fig_voice_users),
                 ],
                 style={"marginBottom": "2em"},
