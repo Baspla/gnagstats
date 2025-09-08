@@ -30,16 +30,18 @@ class DataCollector:
                     for member in channel.members:
                         if str(member.id) in self.data["user_discord_ids"]:  # Nur Eingetragene Leute tracken
                             tracked_users += 1
+                            logging.debug(f"Tracking user {member.name} (ID: {member.id}) in channel {channel.name}.")
                             self.db.insert_discord_voice_activity(timestamp,str(member.id), channel.name, str(guild.id))
+                            logging.debug(f"User {member.name} is playing {member.activity if member.activity else 'No Activity'}")
                             if member.activity:
-                                logging.info(f"User {member.name} is playing {member.activity}")
+                                logging.debug(f"SEARCHABLE User {member.name} activity details: {member.activity}")
                                 activity_attrs = [
                                     "name", "type", "state", "application_id", "details", "url", "start", "end", "game","flags","party","platform"
                                 ]
                                 for attr in activity_attrs:
                                     try:
                                         value = getattr(member.activity, attr, None)
-                                        logging.info(f"Activity attribute '{attr}': {value}")
+                                        logging.debug(f"SEARCHABLE Activity attribute '{attr}': {value}")
                                     except Exception as e:
                                         logging.error(f"Error getting activity attribute '{attr}': {e}")
                                 self.db.insert_discord_game_activity(timestamp,str(member.id), str(member.activity))
@@ -62,7 +64,7 @@ class DataCollector:
             if user:
                 logging.debug(f"User data: {user}")
                 if user["player"].get("gameextrainfo"):
-                    logging.debug(f"User is playing: {user["player"]["gameextrainfo"]}")
+                    logging.debug(f"User is playing steam game: {user["player"]["gameextrainfo"]}")
                     self.db.insert_steam_game_activity(timestamp,user["player"]["steamid"],user["player"]["gameextrainfo"])
             else:
                 logging.debug(f"Failed to collect data for Steam user {user}")
