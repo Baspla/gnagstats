@@ -598,8 +598,8 @@ def create_app(database: Database):
 
         default_interval = float(recent["collection_interval"].dropna().median() if not recent["collection_interval"].dropna().empty else 300.0)
         # Grenzen als datetime
-        cutoff_dt = datetime.utcfromtimestamp(cutoff_ts)
-        now_dt = datetime.utcfromtimestamp(now_ts)
+        cutoff_dt = datetime.fromtimestamp(cutoff_ts)
+        now_dt = datetime.fromtimestamp(now_ts)
 
         sessions = []  # Sammler für Session-Dicts
         # Gruppieren nach User (alphabetisch für stabile Y-Achse)
@@ -637,8 +637,8 @@ def create_app(database: Database):
                             raise ValueError
                     except Exception:
                         prev_interv = default_interval
-                    # Erlaube eine Lücke bis 1.5 * max(prev, current interv)
-                    max_gap = 1.5 * max(prev_interv, interv)
+                    # Erlaube eine Lücke bis 2 * max(prev, current interv)
+                    max_gap = 2 * max(prev_interv, interv)
                     if chan == current["channel_name"] and gap <= max_gap:
                         # Session erweitern
                         if snapshot_end > current["end_ts"]:
