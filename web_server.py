@@ -7,6 +7,7 @@ import pandas as pd
 
 from db import Database
 from json_data import load_json_data, get_steam_id_to_name_map
+from config import WEB_CACHE_TTL_MINUTES, JSON_DATA_PATH
 
 
 def create_app(database: Database):
@@ -24,13 +25,17 @@ def create_app(database: Database):
     def _load_dataframe(force: bool = False) -> pd.DataFrame:
         nonlocal df_cache, last_loaded
         now = int(time.time())
-        # Refresh every 5 minutes or on demand
-        if (not force) and df_cache is not None and last_loaded and (now - last_loaded < 300):
+        # Refresh every N minutes or on demand
+        ttl_seconds = max(1, WEB_CACHE_TTL_MINUTES) * 60
+        if (not force) and df_cache is not None and last_loaded and (now - last_loaded < ttl_seconds):
             return df_cache
 
         rows = database.web_query_get_steam_game_activity()
         # rows: [(timestamp, steam_id, game_name, collection_interval), ...]
-        df = pd.DataFrame(rows, columns=["timestamp", "steam_id", "game_name", "collection_interval"]) if rows else pd.DataFrame(columns=["timestamp", "steam_id", "game_name", "collection_interval"]) 
+        df = (
+            pd.DataFrame(rows, columns=["timestamp", "steam_id", "game_name", "collection_interval"]) if rows
+            else pd.DataFrame(columns=["timestamp", "steam_id", "game_name", "collection_interval"])
+        )
         if not df.empty:
             df["timestamp_dt"] = pd.to_datetime(df["timestamp"], unit="s")
             # minutes per snapshot falls back to 5 if collection_interval missing
@@ -76,11 +81,7 @@ def create_app(database: Database):
         filtered = cubed[cubed["steam_id"].isin(top_users_idx) & cubed["game_name"].isin(top_games_idx)]
 
         # Map steam_id to display name from JSON
-        try:
-            json_data = load_json_data(None)  # load via default path in loader
-        except TypeError:
-            # Fallback to explicit path when load_json_data requires it
-            json_data = load_json_data(getattr(__import__('config'), 'JSON_DATA_PATH', 'data.json'))
+        json_data = load_json_data(JSON_DATA_PATH)
         id_map = get_steam_id_to_name_map(json_data) if isinstance(json_data, dict) else {}
         if id_map:
             filtered = filtered.copy()
@@ -103,10 +104,10 @@ def create_app(database: Database):
     app.layout = html.Div(
         [
             html.H1("GNAG Stats – Übersicht"),
-            html.Div(
+        html.Div(
                 [
                     html.Button("Neu laden", id="btn-refresh", n_clicks=0, style={"marginRight": "1em"}),
-                    dcc.Interval(id="auto-refresh", interval=300_000, n_intervals=0),  # 5 min
+            dcc.Interval(id="auto-refresh", interval=max(1, WEB_CACHE_TTL_MINUTES) * 60_000, n_intervals=0),
                     html.Span(id="status-text", style={"marginLeft": "1em", "color": "#666"}),
                 ],
                 style={"marginBottom": "1em"},
@@ -173,7 +174,14 @@ def create_app(database: Database):
             fig_heat.update_xaxes(visible=False)
             fig_heat.update_yaxes(visible=False)
         else:
-            fig_heat = px.imshow(heat.values, x=list(heat.columns), y=list(heat.index), color_continuous_scale="YlGnBu", aspect="auto", labels=dict(color="Stunden"))
+            fig_heat = px.imshow(
+                heat.values,
+                x=list(heat.columns),
+                y=list(heat.index),
+                color_continuous_scale="YlGnBu",
+                aspect="auto",
+                labels=dict(color="Stunden"),
+            )
             fig_heat.update_layout(xaxis_title="Spiel", yaxis_title="Nutzer")
 
         # 4) Vertical bar: hours by hour of day
@@ -181,7 +189,7 @@ def create_app(database: Database):
         fig_hour = px.bar(by_hour, x="hour_of_day", y="total_hours")
         fig_hour.update_layout(xaxis_title="Stunde (0-23)", yaxis_title="Stunden")
 
-        status = f"Zuletzt geladen: {time.strftime('%Y-%m-%d %H:%M:%S')} – Zeilen: {len(df)}"
+        status = f"Zuletzt geladen: {time.strftime('%Y-%m-%d %H:%M:%S')} – Zeilen: {len(df)} – Cache: {WEB_CACHE_TTL_MINUTES} min"
         return fig_bar, fig_line, fig_heat, fig_hour, status
 
     return app
