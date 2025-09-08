@@ -104,7 +104,7 @@ class Database:
 
     def get_steam_most_played_games(self, start_time: int, end_time: int):
         """
-        Get the most played games in a given time range.
+        Get the most played games in a given time range, including total playtime.
         :param start_time:
         :param end_time:
         :return:
@@ -116,9 +116,9 @@ class Database:
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
         cursor.execute('''
-            SELECT game_name, COUNT(*) as count
+            SELECT game_name, COUNT(*) as count, SUM(collection_interval) as total_playtime
             FROM steam_game_activity
-            WHERE timestamp BETWEEN ? AND ?
+            WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
             GROUP BY game_name
             ORDER BY count DESC
         ''', (start_time, end_time))
@@ -142,7 +142,7 @@ class Database:
         cursor.execute('''
             SELECT game_name, COUNT(DISTINCT steam_id) AS player_count
             FROM steam_game_activity
-            WHERE timestamp BETWEEN ? AND ?
+            WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
             GROUP BY timestamp, game_name
             ORDER BY player_count DESC
         ''', (start_time, end_time))
@@ -158,13 +158,14 @@ class Database:
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
         cursor.execute('''
-        SELECT game_name, COUNT(*) AS occurrences
+        SELECT game_name, COUNT(*) AS occurrences, SUM(total_playtime) AS total_playtime
             FROM (
-                SELECT timestamp, game_name
-            FROM steam_game_activity
-            GROUP BY timestamp, game_name
-            HAVING COUNT(DISTINCT steam_id) >= 2
-        ) grouped_games
+                SELECT timestamp, game_name, SUM(collection_interval) AS total_playtime
+                FROM steam_game_activity
+                WHERE collection_interval IS NOT NULL
+                GROUP BY timestamp, game_name
+                HAVING COUNT(DISTINCT steam_id) >= 2
+            ) grouped_games
         WHERE timestamp BETWEEN ? AND ?
         GROUP BY game_name
         ORDER BY occurrences DESC
@@ -177,7 +178,7 @@ class Database:
     def get_discord_busiest_voice_channels(self, start_time: int, end_time: int):
         """
         Get the busiest Discord voice channels in a given time range.
-        Calculated by summing up the user count in each channel with usercounts > 1.
+        Calculated by summing up user_count * collection_interval for each channel with usercounts > 1.
         :param start_time:
         :param end_time:
         :return:
@@ -189,11 +190,12 @@ class Database:
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
         cursor.execute('''
-            SELECT channel_name, SUM(user_count) as accumulated_user_count
+            SELECT channel_name,
+                   SUM(user_count * collection_interval) as total_voicetime
             FROM discord_voice_channels
-            WHERE timestamp BETWEEN ? AND ? AND user_count > 1
+            WHERE timestamp BETWEEN ? AND ? AND user_count > 1 AND collection_interval IS NOT NULL
             GROUP BY channel_name
-            ORDER BY accumulated_user_count DESC
+            ORDER BY total_voicetime DESC
         ''', (start_time, end_time))
         result = cursor.fetchall()
         connection.close()
@@ -201,7 +203,7 @@ class Database:
 
     def get_discord_total_voice_activity(self, start_time: int, end_time: int):
         """
-        Get the total Discord voice activity in a given time range.
+        Get the total Discord voice activity time (in seconds) in a given time range for channels with >1 users.
         :param start_time:
         :param end_time:
         :return:
@@ -213,9 +215,9 @@ class Database:
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
         cursor.execute('''
-            SELECT COUNT(*) as voice_activity_count
+            SELECT SUM(user_count * collection_interval) as total_voicetime
             FROM discord_voice_channels
-            WHERE timestamp BETWEEN ? AND ? AND user_count > 1
+            WHERE timestamp BETWEEN ? AND ? AND user_count > 1 AND collection_interval IS NOT NULL
         ''', (start_time, end_time))
         result = cursor.fetchone()
         connection.close()
@@ -223,7 +225,7 @@ class Database:
 
     def get_discord_total_lonely_voice_activity(self, start_time: int, end_time: int):
         """
-        Get the total Discord voice activity in a given time range.
+        Get the total Discord voice activity time (in seconds) in a given time range for channels with only 1 user.
         :param start_time:
         :param end_time:
         :return:
@@ -234,12 +236,10 @@ class Database:
             end_time = int(end_time.timestamp())
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
-        # enable debug logging
-        connection.set_trace_callback(logging.debug)
         cursor.execute('''
-            SELECT SUM(user_count) as accumulated_user_count
+            SELECT SUM(user_count * collection_interval) as total_lonely_voicetime
             FROM discord_voice_channels
-            WHERE timestamp BETWEEN ? AND ? AND user_count = 1
+            WHERE timestamp BETWEEN ? AND ? AND user_count = 1 AND collection_interval IS NOT NULL
         ''', (start_time, end_time))
         result = cursor.fetchone()
         connection.close()
@@ -261,7 +261,7 @@ class Database:
         cursor.execute('''
             SELECT COUNT(DISTINCT discord_id) as unique_users
             FROM discord_voice_activity
-            WHERE timestamp BETWEEN ? AND ?
+            WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
         ''', (start_time, end_time))
         result = cursor.fetchone()
         connection.close()
@@ -271,17 +271,57 @@ class Database:
     # Utilities
     #
 
-def timesteps_to_human_readable( timesteps: int):
+def seconds_to_human_readable(total_seconds: int):
     """
-    Convert a timestep to a human-readable format.
-    One timestep is DATA_COLLECTION_INTERVAL seconds long.
+    Konvertiert eine Anzahl von Sekunden in ein menschenlesbares Format.
+    :param total_seconds:
+    :return:
+    """
+    logging.debug(f"Converting {total_seconds} seconds to human-readable format.")
+    if not total_seconds:
+        return "0 Minuten"
+    days = total_seconds // (24 * 3600)
+    hours = (total_seconds % (24 * 3600)) // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    output = ""
+
+    if days == 1:
+        output += f"{days} Tag "
+    elif days > 1:
+        output += f"{days} Tage "
+
+    if hours == 1:
+        output += f"{hours} Stunde "
+    elif hours > 1:
+        output += f"{hours} Stunden "
+
+    if minutes == 1:
+        output += f"{minutes} Minute "
+    elif minutes > 1:
+        output += f"{minutes} Minuten "
+
+    if seconds == 1:
+        output += f"{seconds} Sekunde"
+    elif seconds > 1:
+        output += f"{seconds} Sekunden"
+
+    return output.strip()
+
+def timesteps_to_human_readable(timesteps: int, collection_interval: int = None):
+    """
+    Konvertiert eine Anzahl von Timesteps in ein menschenlesbares Format.
+    Ein Timestep ist collection_interval Sekunden lang (Standard: DATA_COLLECTION_INTERVAL).
     :param timesteps:
+    :param collection_interval: Sekunden pro Timestep
     :return:
     """
     logging.debug(f"Converting {timesteps} timesteps to human-readable format.")
     if not timesteps:
         return "0 Minuten"
-    total_seconds = timesteps * DATA_COLLECTION_INTERVAL
+    if collection_interval is None:
+        collection_interval = DATA_COLLECTION_INTERVAL
+    total_seconds = timesteps * collection_interval
     days = total_seconds // (24 * 3600)
     hours = (total_seconds % (24 * 3600)) // 3600
     minutes = (total_seconds % 3600) // 60

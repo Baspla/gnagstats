@@ -6,20 +6,20 @@ Diese Woche war niemand in einem Voice Channel. 🤐
 {% elif discord_users_voice == 1 %}
 Es war nur einmal jemand diese Woche da. 🙃
 {% else %}
-Insgesamt waren **{{ discord_users_voice }} Leute** aktiv in den Voice Channels und haben **{{ discord_time_voice|timesteps_to_human_readable }}** miteinander gesprochen. 👥
+ Insgesamt waren **{{ discord_users_voice }} Leute** aktiv in den Voice Channels und haben **{{ discord_time_voice|seconds_to_human_readable }}** miteinander gesprochen. 👥
     {% set uv_trend = '↗️' if discord_users_voice_change_pct > 0 else ('↘️' if discord_users_voice_change_pct < 0 else '➡️') %}
     {% if discord_users_voice_change_pct != 0 %}
     ({{ uv_trend }} {{ discord_users_voice_change_pct|round(1) }}% zur Vorwoche)
     {% endif %}
 {% endif %}
-{% if discord_time_alone|timesteps_to_human_readable != "0 Minuten" %}
-Für ganze **{{ discord_time_alone|timesteps_to_human_readable }}** saß jemand alleine in einem Voice Channel. 😔
+ {% if discord_time_alone|seconds_to_human_readable != "0 Minuten" %}
+ Für ganze **{{ discord_time_alone|seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel. 😔
 {% else %}
 Niemand hat diese Woche alleine Zeit in einem Voice Channel verbracht. 😊
 {% endif %}
-{% set vt_trend = '↗️' if discord_time_voice_change_pct > 0 else ('↘️' if discord_time_voice_change_pct < 0 else '➡️') %}
-{% if discord_time_voice_change_pct != 0 %}
-_Voice-Zeit: {{ vt_trend }} {{ discord_time_voice_change_pct|round(1) }}% zur Vorwoche_
+ {% set vt_trend = '↗️' if discord_time_voice_change_pct > 0 else ('↘️' if discord_time_voice_change_pct < 0 else '➡️') %}
+ {% if discord_time_voice_change_pct != 0 %}
+ _Voice-Zeit: {{ vt_trend }} {{ discord_time_voice_change_pct|round(1) }}% zur Vorwoche_
 {% endif %}
 ### **Where's the gaming?** 🎮
 {% if steam_most_played_together %}

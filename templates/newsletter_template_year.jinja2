@@ -16,12 +16,12 @@ Vielleicht wird das kommende Jahr gesprächiger? 🗨️
 Nur eine Person hat dieses Jahr einen Voice Channel genutzt – ein einsamer Pionier! 🙃
 Wir hoffen, dass nächstes Jahr mehr Leute ihre Stimme hören lassen.
 {% else %}
-Insgesamt haben **{{ discord_users_voice }} Leute** die Voice Channels genutzt und dabei beeindruckende **{{ discord_time_voice }}** miteinander gesprochen. 👥
+ Insgesamt haben **{{ discord_users_voice }} Leute** die Voice Channels genutzt und dabei beeindruckende **{{ discord_time_voice|seconds_to_human_readable }}** miteinander gesprochen. 👥
 Das zeigt, wie wichtig Gespräche und gemeinsame Momente für unsere Community sind!
 {% endif %}
 
-{% if discord_time_alone != "0 Minuten" %}
-Für ganze **{{ discord_time_alone }}** saß jemand alleine in einem Voice Channel. 😔
+ {% if discord_time_alone|seconds_to_human_readable != "0 Minuten" %}
+ Für ganze **{{ discord_time_alone|seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel. 😔
 Vielleicht können wir im nächsten Jahr dafür sorgen, dass niemand allein bleibt! 😊
 {% else %}
 Niemand hat dieses Jahr alleine Zeit in einem Voice Channel verbracht – ein tolles Zeichen für Zusammenhalt! 💪
