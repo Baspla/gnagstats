@@ -245,69 +245,31 @@ def create_app(database: Database):
                 margin=dict(l=0, r=0, t=0, b=0)
             ))
 
-        # Position using spring layout for attraction proportional to weight
-        # Heavier edges pull nodes closer; scale down for stability
-        weights = [d.get("weight", 1.0) for _, _, d in G.edges(data=True)]
-        max_w = max(weights) if weights else 1.0
-        norm_weights = [w / max_w for w in weights]
-        # Map normalized weights back to edges in same order
-        for (e, w) in zip(G.edges(data=True), norm_weights):
-            e[2]["norm_w"] = w
-
-        # Use spring_layout with edge weights (higher weight = stronger spring)
+        # Position using spring layout with weight influence
         pos = nx.spring_layout(G, weight="weight", k=None, iterations=200, seed=42)
 
-        # Build Plotly scatter traces
-        # Build multiple edge traces binned by weight to approximate variable thickness
+        # Build per-edge traces with hover showing hours (weight)
         weights_all = [float(d.get("weight", 1.0)) for _, _, d in G.edges(data=True)]
-        w_min, w_max = min(weights_all), max(weights_all)
-        nbins = 5
-        # Create thresholds
-        if w_max == w_min:
-            bins = [w_min, w_max]
-        else:
-            bins = list(pd.interval_range(start=w_min, end=w_max, periods=nbins))
-
+        w_max = max(weights_all) if weights_all else 1.0
         edge_traces = []
-        # Visual width range
-        min_w, max_w_vis = 0.8, 8.0
-        for i, interval in enumerate(bins if isinstance(bins[0], pd.Interval) else [pd.Interval(left=w_min-1e-9, right=w_max, closed='both')]):
-            ex, ey = [], []
-            for u, v, d in G.edges(data=True):
-                w = float(d.get("weight", 1.0))
-                in_bin = False
-                if isinstance(interval, pd.Interval):
-                    # include right edge for last bin
-                    if i == len(bins) - 1:
-                        in_bin = (w >= interval.left) and (w <= interval.right)
-                    else:
-                        in_bin = (w >= interval.left) and (w < interval.right)
-                else:
-                    in_bin = True
-                if not in_bin:
-                    continue
-                x0, y0 = pos[u]
-                x1, y1 = pos[v]
-                ex += [x0, x1, None]
-                ey += [y0, y1, None]
-            if not ex:
-                continue
-            # width for this bin: map interval midpoint to visual width
-            if isinstance(interval, pd.Interval):
-                mid = (float(interval.left) + float(interval.right)) / 2.0
-            else:
-                mid = (w_min + w_max) / 2.0
-            if w_max > w_min:
-                width = min_w + (max_w_vis - min_w) * ((mid - w_min) / (w_max - w_min))
-            else:
-                width = (min_w + max_w_vis) / 2
+        for u, v, d in G.edges(data=True):
+            w = float(d.get("weight", 1.0))
+            width = 1.0 + 7.0 * (w / w_max) if w_max > 0 else 4.0
+            x0, y0 = pos[u]
+            x1, y1 = pos[v]
+            u_label = G.nodes[u].get("label", str(u))
+            v_label = G.nodes[v].get("label", str(v))
+            hover_text = f"{u_label} – {v_label}: {w:.1f} h"
             edge_traces.append(
                 go.Scatter(
-                    x=ex, y=ey,
-                    line=dict(width=width, color="#aaaaaa"),
-                    hoverinfo="none",
+                    x=[x0, x1],
+                    y=[y0, y1],
                     mode="lines",
-                    opacity=0.5,
+                    line=dict(width=width, color="#aaaaaa"),
+                    hoverinfo="text",
+                    text=[hover_text, hover_text],
+                    hovertemplate="%{text}<extra></extra>",
+                    opacity=0.55,
                     showlegend=False,
                 )
             )
@@ -476,8 +438,8 @@ def create_app(database: Database):
 
     # 5) Punkte: Tages-Peaks der Gesamtnutzer in Sprachkanälen
     voice_users_daily_peak = _agg_daily_peak_voice_users(df_discord_voice_channels_initial)
-    fig_voice_users = px.scatter(voice_users_daily_peak, x="date", y="total_users")
-    fig_voice_users.update_traces(mode="markers", marker=dict(size=7))
+    # Balken statt Punkte für Tages-Peaks
+    fig_voice_users = px.bar(voice_users_daily_peak, x="date", y="total_users")
     # Nur horizontale Auswahl erlauben (Selection entlang X), vertikale Achse fix
     fig_voice_users.update_layout(dragmode="select", selectdirection="h")
     fig_voice_users.update_yaxes(fixedrange=True)
@@ -533,6 +495,7 @@ def create_app(database: Database):
                                 style={
                                     "flex": "1",
                                     "minWidth": 0,
+                                    # Nur vertikal scrollen, um viele Labels zu handeln
                                     "height": "600px",
                                     "overflowY": "auto",
                                     "overflowX": "hidden",
@@ -744,8 +707,8 @@ def create_app(database: Database):
         fig_hour_f.update_layout(xaxis_title="Stunde (0-23)", yaxis_title="Stunden")
 
         voice_users_daily_peak_f = _agg_daily_peak_voice_users(df_voice_channels_f)
-        fig_voice_users_f = px.scatter(voice_users_daily_peak_f, x="date", y="total_users")
-        fig_voice_users_f.update_traces(mode="markers", marker=dict(size=7))
+        # Balken statt Punkte für Tages-Peaks
+        fig_voice_users_f = px.bar(voice_users_daily_peak_f, x="date", y="total_users")
         fig_voice_users_f.update_layout(dragmode="select", selectdirection="h")
         fig_voice_users_f.update_yaxes(fixedrange=True)
         fig_voice_users_f.update_layout(xaxis_title="Datum", yaxis_title="Peak Nutzer/Tag")
