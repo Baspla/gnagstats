@@ -52,7 +52,7 @@ async def core_loop(collector,newsletter_creator):
         last_month = dt.now().month - 1 if dt.now().month > 1 else 12
         year = dt.now().year if dt.now().month > 1 else dt.now().year - 1
         newsletter_creator.create_monthly_newsletter(year, last_month)
-    await asyncio.sleep(DATA_COLLECTION_INTERVAL * 60)
+    await asyncio.sleep(DATA_COLLECTION_INTERVAL)
     last_weekly_newsletter_day = None
     last_monthly_newsletter_day = None
     while True:
@@ -60,7 +60,8 @@ async def core_loop(collector,newsletter_creator):
         now = time.localtime()
         day_of_year = now.tm_yday
         # Monday at 9:00 AM
-        if now.tm_wday == 0 and now.tm_hour == 9 and 0 <= now.tm_min <= DATA_COLLECTION_INTERVAL * 2 and last_weekly_newsletter_day != day_of_year:
+        interval_minutes = DATA_COLLECTION_INTERVAL // 60
+        if now.tm_wday == 0 and now.tm_hour == 9 and 0 <= now.tm_min <= interval_minutes * 2 and last_weekly_newsletter_day != day_of_year:
             logging.info("It's time to publish the newsletter!")
             day_last_week = dt.now() - datetime.timedelta(days=7)
             try:
@@ -69,7 +70,7 @@ async def core_loop(collector,newsletter_creator):
                 logging.error(f"Error creating weekly newsletter: {e}")
             last_weekly_newsletter_day = day_of_year
         # First day of the month at 12:00 PM
-        if now.tm_mday == 1 and now.tm_hour == 12 and 0 <= now.tm_min <= DATA_COLLECTION_INTERVAL * 2 and last_monthly_newsletter_day != day_of_year:
+        if now.tm_mday == 1 and now.tm_hour == 12 and 0 <= now.tm_min <= interval_minutes * 2 and last_monthly_newsletter_day != day_of_year:
             logging.info("It's time to publish the monthly newsletter!")
             try:
                 last_month = dt.now().month - 1 if dt.now().month > 1 else 12
@@ -92,7 +93,7 @@ async def core_loop(collector,newsletter_creator):
             logging.warning(f"Steam data collection exception: {e}")
         # Calculate the next scheduled time
         elapsed_time :float = time.time() - start_time
-        sleep_time = DATA_COLLECTION_INTERVAL * 60 - elapsed_time
+        sleep_time = DATA_COLLECTION_INTERVAL - elapsed_time
         if sleep_time > 0:
             logging.debug(f"Sleeping for {sleep_time} seconds.")
             await asyncio.sleep(sleep_time)

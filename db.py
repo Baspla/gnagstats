@@ -274,17 +274,18 @@ class Database:
 def timesteps_to_human_readable( timesteps: int):
     """
     Convert a timestep to a human-readable format.
-    One timestep is DATA_COLLECTION_INTERVAL minutes long.
+    One timestep is DATA_COLLECTION_INTERVAL seconds long.
     :param timesteps:
     :return:
     """
     logging.debug(f"Converting {timesteps} timesteps to human-readable format.")
     if not timesteps:
         return "0 Minuten"
-    timesteps = timesteps * DATA_COLLECTION_INTERVAL
-    days = timesteps // (24 * 60)
-    hours = (timesteps % (24 * 60)) // 60
-    minutes = timesteps % 60
+    total_seconds = timesteps * DATA_COLLECTION_INTERVAL
+    days = total_seconds // (24 * 3600)
+    hours = (total_seconds % (24 * 3600)) // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
     output = ""
 
     if days == 1:
@@ -298,9 +299,14 @@ def timesteps_to_human_readable( timesteps: int):
         output += f"{hours} Stunden "
 
     if minutes == 1:
-        output += f"{minutes} Minute"
+        output += f"{minutes} Minute "
     elif minutes > 1:
-        output += f"{minutes} Minuten"
+        output += f"{minutes} Minuten "
+
+    if seconds == 1:
+        output += f"{seconds} Sekunde"
+    elif seconds > 1:
+        output += f"{seconds} Sekunden"
 
     return output.strip()
 

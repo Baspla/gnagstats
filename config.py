@@ -4,7 +4,7 @@ DB_PATH : str                   = os.getenv("DB_PATH","collected_data.db")
 DISCORD_API_TOKEN : str         = os.getenv("DISCORD_API_TOKEN", "")
 DISCORD_WEBHOOK_URL : str         = os.getenv("DISCORD_WEBHOOK_URL", "")
 STEAM_API_KEY : str             = os.getenv("STEAM_API_KEY", "")
-DATA_COLLECTION_INTERVAL : int  = int(os.getenv("DATA_COLLECTION_INTERVAL", 5))  # Intervall in Minuten für die Datensammlung
+DATA_COLLECTION_INTERVAL : int  = int(os.getenv("DATA_COLLECTION_INTERVAL", 300))  # Intervall in Sekunden für die Datensammlung
 DISCORD_STATS_ENABLED : bool    = os.getenv("DISCORD_STATS_ENABLED", "True").lower() == "true"  # Aktiviert/Deaktiviert das Sammeln von Discord-Daten
 STEAM_STATS_ENABLED : bool      = os.getenv("STEAM_STATS_ENABLED", "True").lower() == "true"  # Aktiviert/Deaktiviert das Sammeln von Steam-Daten
 LOGGING_LEVEL : str             = os.getenv("LOGGING_LEVEL", "INFO").upper()  # Setzt das Logging-Level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
