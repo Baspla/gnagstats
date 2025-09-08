@@ -6,91 +6,85 @@ Diese Woche war niemand in einem Voice Channel. 🤐
 {% elif discord_users_voice == 1 %}
 Es war nur einmal jemand diese Woche da. 🙃
 {% else %}
- Insgesamt waren **{{ discord_users_voice }} Leute** aktiv in den Voice Channels und haben **{{ discord_time_voice|seconds_to_human_readable }}** miteinander gesprochen. 👥
-    {% set uv_trend = '↗️' if discord_users_voice_change_pct > 0 else ('↘️' if discord_users_voice_change_pct < 0 else '➡️') %}
-    {% if discord_users_voice_change_pct != 0 %}
-    ({{ uv_trend }} {{ discord_users_voice_change_pct|round(1) }}% zur Vorwoche)
-    {% endif %}
+Insgesamt waren **{{ discord_users_voice }} Leute** aktiv in den Voice Channels und haben **{{ discord_time_voice|seconds_to_human_readable }}** miteinander gesprochen. 👥
+{% set uv_trend = '↗️' if discord_users_voice_change_pct > 0 else ('↘️' if discord_users_voice_change_pct < 0 else '➡️') %}
+_({{ uv_trend }} {{ discord_users_voice_change_pct|round(1) }}% zur Vorwoche)_
 {% endif %}
- {% if discord_time_alone|seconds_to_human_readable != "0 Minuten" %}
- Für ganze **{{ discord_time_alone|seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel. 😔
+{% if discord_time_alone|seconds_to_human_readable != "0 Minuten" %}
+Für ganze **{{ discord_time_alone|seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel. 😔
 {% else %}
 Niemand hat diese Woche alleine Zeit in einem Voice Channel verbracht. 😊
 {% endif %}
- {% set vt_trend = '↗️' if discord_time_voice_change_pct > 0 else ('↘️' if discord_time_voice_change_pct < 0 else '➡️') %}
- {% if discord_time_voice_change_pct != 0 %}
- _Voice-Zeit: {{ vt_trend }} {{ discord_time_voice_change_pct|round(1) }}% zur Vorwoche_
+{% set vt_trend = '↗️' if discord_time_voice_change_pct > 0 else ('↘️' if discord_time_voice_change_pct < 0 else '➡️') %}
+{% if discord_time_voice_change_pct != 0 %}
+_({{ vt_trend }} {{ discord_time_voice_change_pct|round(1) }}% zur Vorwoche)_
 {% endif %}
 ### **Where's the gaming?** 🎮
 {% if steam_most_played_together %}
 Gemeinsam wurde am meisten **{{ steam_most_played_together }}** gespielt. 🤝
-    {% set spt_trend = '↗️' if steam_most_played_together_list_change_pct > 0 else ('↘️' if steam_most_played_together_list_change_pct < 0 else '➡️') %}
-    {% if steam_most_played_together_list_change_pct != 0 %}
-    _(Gemeinsame Spielstunden: {{ spt_trend }} {{ steam_most_played_together_list_change_pct|round(1) }}% zur Vorwoche)_
-    {% endif %}
+{% set spt_trend = '↗️' if steam_most_played_together_list_change_pct > 0 else ('↘️' if steam_most_played_together_list_change_pct < 0 else '➡️') %}
+_({{ spt_trend }} {{ steam_most_played_together_list_change_pct|round(1) }}% zur Vorwoche)_
 {% else %}
 Diese Woche wurde kein einziges Spiel gemeinsam gespielt.
 {% endif %}
 {% if steam_most_played %}
 Das over-all meistgespielte Game war **{{ steam_most_played }}**. 🏆
-    {% set sp_trend = '↗️' if steam_most_played_list_change_pct > 0 else ('↘️' if steam_most_played_list_change_pct < 0 else '➡️') %}
-    {% if steam_most_played_list_change_pct != 0 %}
-    _(Spielstunden: {{ sp_trend }} {{ steam_most_played_list_change_pct|round(1) }}% zur Vorwoche)_
-    {% endif %}
+{% set sp_trend = '↗️' if steam_most_played_list_change_pct > 0 else ('↘️' if steam_most_played_list_change_pct < 0 else '➡️') %}
+_({{ sp_trend }} {{ steam_most_played_list_change_pct|round(1) }}% zur Vorwoche)_
 {% else %}
 Diese Woche wurde kein Spiel besonders häufig gespielt.
 {% endif %}
 {% if discord_active_events|length == 0 %}
 {% elif discord_active_events|length == 1 %}
 ### **Was geht grade ab?** 📅
-    {% if discord_active_events[0].end_time %}
+{% if discord_active_events[0].end_time %}
 Derzeit läuft noch **{{ discord_active_events[0].name }}** bis <t:{{ discord_active_events[0].end_time | datetime_to_timestamp }}:f>
-    {% else %}
+{% else %}
 Derzeit läuft noch **{{ discord_active_events[0].name }}**.
-    {% endif %}
-    {% if discord_active_events[0].description %}
+{% endif %}
+{% if discord_active_events[0].description %}
 Die Beschreibung lautet: {{ discord_active_events[0].description }}
-    {% endif %}
+{% endif %}
 {% else %}
 ### **Was geht grade ab?** 📅
 Derzeit laufen folgende Events:
-    {% for event in discord_active_events %}
+{% for event in discord_active_events %}
 
 **{{ event.name }}**
 🕒 Startzeit: <t:{{ event.start_time | datetime_to_timestamp }}:f>
-        {% if event.end_time %}
+{% if event.end_time %}
 ⏳ Endzeit: <t:{{ event.end_time | datetime_to_timestamp }}:f>
-        {% endif %}
-        {% if event.description %}
+{% endif %}
+{% if event.description %}
 Die Beschreibung lautet: {{ event.description }}
-        {% endif %}
-    {% endfor %}
+{% endif %}
+{% endfor %}
 {% endif %}
 {% if discord_non_active_events|length == 0 %}
 {% elif discord_non_active_events|length == 1 %}
 ### **Geplante Events** 🔮
-    {% if discord_non_active_events[0].end_time %}
+{% if discord_non_active_events[0].end_time %}
 Bald steht noch **{{ discord_non_active_events[0].name }}** von <t:{{ discord_non_active_events[0].start_time | datetime_to_timestamp }}:f> bis <t:{{ discord_non_active_events[0].end_time | datetime_to_timestamp }}:f> an.
-    {% else %}
+{% else %}
 Bald steht noch **{{ discord_non_active_events[0].name }}** an. Da geht es am <t:{{ discord_non_active_events[0].start_time | datetime_to_timestamp }}:f> los.
-    {% endif %}
-    {% if discord_non_active_events[0].description %}
+{% endif %}
+{% if discord_non_active_events[0].description %}
 Die Beschreibung lautet: {{ discord_non_active_events[0].description }}
-    {% endif %}
+{% endif %}
 {% else %}
 ### **Geplante Events** 🔮
 Es sind folgende weitere Events in den nächsten Wochen geplant:
-    {% for event in discord_non_active_events %}
+{% for event in discord_non_active_events %}
 
 **{{ event.name }}**
 🕒 Startzeit: <t:{{ event.start_time | datetime_to_timestamp }}:f>
-        {% if event.end_time %}
+{% if event.end_time %}
 ⏳ Endzeit: <t:{{ event.end_time | datetime_to_timestamp }}:f>
-        {% endif %}
-        {% if event.description %}
+{% endif %}
+{% if event.description %}
 Die Beschreibung lautet: {{ event.description }}
-        {% endif %}
-    {% endfor %}
+{% endif %}
+{% endfor %}
 {% endif %}
 {% if birthdays|length == 0 %}
 {% elif birthdays|length == 1 %}
@@ -99,9 +93,9 @@ Am <t:{{ birthdays[0].next_birthday | datetime_to_timestamp }}:D> hat **{{ birth
 {% else %}
 ### **Geburtstage** 🎉
 Folgende Geburtstage stehen an:
-    {% for birthday in birthdays %}
-    Am <t:{{ birthday.next_birthday | datetime_to_timestamp }}:D> hat **{{ birthday.name }}** Geburtstag! 🎉🎈
-    {% endfor %}
+{% for birthday in birthdays %}
+Am <t:{{ birthday.next_birthday | datetime_to_timestamp }}:D> hat **{{ birthday.name }}** Geburtstag! 🎉🎈
+{% endfor %}
 {% endif %}
 
 ✨ Danke fürs Lesen und bis zur nächsten Woche! ✨
