@@ -1,14 +1,33 @@
+"""Dash Webserver – nur Layout & Callback Logik.
+
+Die eigentliche Datenbeschaffung & Aggregationen liegen jetzt in
+`web_data.py` (WebDataLoader) und `web_aggregations.py`.
+
+Dieses Modul konzentriert sich auf:
+ - App-Erstellung
+ - Layout Definition
+ - Callback Wiring
+"""
 import logging
 import threading
-import time
 from typing import Optional
 
 import pandas as pd
+from waitress import serve
 
 from db import Database
-from json_data import load_json_data, get_steam_id_to_name_map, get_discord_id_to_name_map
-from config import WEB_CACHE_TTL_MINUTES, JSON_DATA_PATH
-from waitress import serve
+from web_data import WebDataLoader
+from web_aggregations import (
+    agg_playtime_per_game,
+    agg_daily_hours,
+    agg_heatmap_user_top_games,
+    agg_hours_by_hour_of_day,
+    recent_players_df,
+    agg_daily_peak_voice_users,
+    build_user_game_network,
+    build_voice_user_network,
+    build_voice_24h_timeline,
+)
 
 
 def create_app(database: Database):
@@ -22,724 +41,28 @@ def create_app(database: Database):
     # Initialize Dash app (Flask server accessible via app.server)
     app = Dash(__name__, title="Gnag Stats")
 
-    # Cached DataFrames and last refresh timestamps
-    df_steam_cache: Optional[pd.DataFrame] = None
-    df_discord_voice_activity_cache: Optional[pd.DataFrame] = None
-    df_discord_voice_channels_cache: Optional[pd.DataFrame] = None
-    df_discord_game_activity_cache: Optional[pd.DataFrame] = None
-    last_loaded_steam: Optional[int] = None
-    last_loaded_dva: Optional[int] = None
-    last_loaded_dvc: Optional[int] = None
-    last_loaded_dga: Optional[int] = None
+    # Tailwind über CDN einbinden (schnelle Integration). Für Production kann ein
+    # eigener Build in /assets genutzt werden.
+    app.index_string = """<!DOCTYPE html>\n<html>\n<head>\n    {%metas%}\n    <title>{%title%}</title>\n    {%favicon%}\n    <script src=\"https://cdn.tailwindcss.com\"></script>\n    <script>tailwind.config = { theme: { extend: { colors: { brand: { 50:'#f5faff',100:'#e0f2ff',200:'#b9e4ff',300:'#89d1ff',400:'#53b9ff',500:'#1d9fff',600:'#007ddb',700:'#005fa8',800:'#004476',900:'#012e50'} } } } };</script>\n    {%css%}\n</head>\n<body class=\"min-h-screen bg-gray-50 text-gray-800 antialiased\">\n    <div id=\"_dash-app-wrapper\" class=\"flex flex-col min-h-screen\">{%app_entry%}\n      <footer class=\"mt-auto text-center text-xs text-gray-400 py-6\">GNAG Stats © <span id=year></span></footer>\n    </div>\n    <script>document.getElementById('year').textContent = new Date().getFullYear();</script>\n    {%config%}\n    {%scripts%}\n    {%renderer%}\n</body>\n</html>"""
 
-    def _load_df_steam_game_activity(force: bool = False) -> pd.DataFrame:
-        nonlocal df_steam_cache, last_loaded_steam
-        now = int(time.time())
-        # Refresh every N minutes or on demand
-        ttl_seconds = max(1, WEB_CACHE_TTL_MINUTES) * 60
-        if (not force) and df_steam_cache is not None and last_loaded_steam and (now - last_loaded_steam < ttl_seconds):
-            return df_steam_cache
+    # Zentraler Loader (mit Cache)
+    data_loader = WebDataLoader(database)
 
-        rows = database.web_query_get_steam_game_activity()
-        # rows: [(timestamp, steam_id, game_name, collection_interval), ...]
-        df = (
-            pd.DataFrame(rows, columns=["timestamp", "steam_id", "game_name", "collection_interval"]) if rows
-            else pd.DataFrame(columns=["timestamp", "steam_id", "game_name", "collection_interval"])
-        )
-        if not df.empty:
-            df["timestamp_dt"] = pd.to_datetime(df["timestamp"], unit="s")
-            # minutes per snapshot falls back to 5 if collection_interval missing
-            df["minutes_per_snapshot"] = (df["collection_interval"].fillna(300) / 60).astype(float)
-            # Map steam_id to display name from JSON
-            json_data = load_json_data(JSON_DATA_PATH)
-            id_map = get_steam_id_to_name_map(json_data) if isinstance(json_data, dict) else {}
-            if id_map:
-                df["user_name"] = df["steam_id"].astype(str).map(id_map).fillna(df["steam_id"].astype(str))
-            else:
-                df["user_name"] = df["steam_id"].astype(str)
-        df_steam_cache = df
-        last_loaded_steam = now
-        logging.debug(f"Loaded DataFrame for web app with {len(df)} rows.")
-        return df
+    # Convenience Wrapper (Kurzformen für alte Namen)
+    _load_df_steam_game_activity = data_loader.load_steam_game_activity
+    _load_df_discord_voice_activity = data_loader.load_discord_voice_activity
+    _load_df_discord_voice_channels = data_loader.load_discord_voice_channels
+    _load_df_discord_game_activity = data_loader.load_discord_game_activity
 
-    def _load_df_discord_voice_activity(force: bool = False) -> pd.DataFrame:
-        nonlocal df_discord_voice_activity_cache, last_loaded_dva
-        now = int(time.time())
-        ttl_seconds = max(1, WEB_CACHE_TTL_MINUTES) * 60
-        if (not force) and df_discord_voice_activity_cache is not None and last_loaded_dva and (now - last_loaded_dva < ttl_seconds):
-            return df_discord_voice_activity_cache
-
-        rows = database.web_query_get_discord_voice_activity()
-        # rows: [(timestamp, discord_id, channel_name, guild_id, collection_interval), ...]
-        df = (
-            pd.DataFrame(rows, columns=["timestamp", "discord_id", "channel_name", "guild_id", "collection_interval"]) if rows
-            else pd.DataFrame(columns=["timestamp", "discord_id", "channel_name", "guild_id", "collection_interval"])
-        )
-        if not df.empty:
-            df["timestamp_dt"] = pd.to_datetime(df["timestamp"], unit="s")
-            df["minutes_per_snapshot"] = (df["collection_interval"].fillna(300) / 60).astype(float)
-            # Map discord_id to display name from JSON
-            json_data = load_json_data(JSON_DATA_PATH)
-            id_map = get_discord_id_to_name_map(json_data) if isinstance(json_data, dict) else {}
-            if id_map:
-                df["user_name"] = df["discord_id"].astype(str).map(id_map).fillna(df["discord_id"].astype(str))
-            else:
-                df["user_name"] = df["discord_id"].astype(str)
-        df_discord_voice_activity_cache = df
-        last_loaded_dva = now
-        logging.debug(f"Loaded Discord voice activity DataFrame with {len(df)} rows.")
-        return df
-
-    def _load_df_discord_voice_channels(force: bool = False) -> pd.DataFrame:
-        nonlocal df_discord_voice_channels_cache, last_loaded_dvc
-        now = int(time.time())
-        ttl_seconds = max(1, WEB_CACHE_TTL_MINUTES) * 60
-        if (not force) and df_discord_voice_channels_cache is not None and last_loaded_dvc and (now - last_loaded_dvc < ttl_seconds):
-            return df_discord_voice_channels_cache
-
-        rows = database.web_query_get_discord_voice_channels()
-        # rows: [(timestamp, channel_name, guild_id, user_count, tracked_users, collection_interval), ...]
-        df = (
-            pd.DataFrame(rows, columns=["timestamp", "channel_name", "guild_id", "user_count", "tracked_users", "collection_interval"]) if rows
-            else pd.DataFrame(columns=["timestamp", "channel_name", "guild_id", "user_count", "tracked_users", "collection_interval"])
-        )
-        if not df.empty:
-            df["timestamp_dt"] = pd.to_datetime(df["timestamp"], unit="s")
-            df["minutes_per_snapshot"] = (df["collection_interval"].fillna(300) / 60).astype(float)
-        df_discord_voice_channels_cache = df
-        last_loaded_dvc = now
-        logging.debug(f"Loaded Discord voice channels DataFrame with {len(df)} rows.")
-        return df
-
-    def _load_df_discord_game_activity(force: bool = False) -> pd.DataFrame:
-        nonlocal df_discord_game_activity_cache, last_loaded_dga
-        now = int(time.time())
-        ttl_seconds = max(1, WEB_CACHE_TTL_MINUTES) * 60
-        if (not force) and df_discord_game_activity_cache is not None and last_loaded_dga and (now - last_loaded_dga < ttl_seconds):
-            return df_discord_game_activity_cache
-
-        rows = database.web_query_get_discord_game_activity()
-        # rows: [(timestamp, discord_id, game_name, collection_interval), ...]
-        df = (
-            pd.DataFrame(rows, columns=["timestamp", "discord_id", "game_name", "collection_interval"]) if rows
-            else pd.DataFrame(columns=["timestamp", "discord_id", "game_name", "collection_interval"])
-        )
-        if not df.empty:
-            df["timestamp_dt"] = pd.to_datetime(df["timestamp"], unit="s")
-            df["minutes_per_snapshot"] = (df["collection_interval"].fillna(300) / 60).astype(float)
-            # Map discord_id to display name from JSON
-            json_data = load_json_data(JSON_DATA_PATH)
-            id_map = get_discord_id_to_name_map(json_data) if isinstance(json_data, dict) else {}
-            if id_map:
-                df["user_name"] = df["discord_id"].astype(str).map(id_map).fillna(df["discord_id"].astype(str))
-            else:
-                df["user_name"] = df["discord_id"].astype(str)
-        df_discord_game_activity_cache = df
-        last_loaded_dga = now
-        logging.debug(f"Loaded Discord game activity DataFrame with {len(df)} rows.")
-        return df
-
-    def _agg_heatmap_user_top_games(df: pd.DataFrame, top_users: int = 10, top_games: int = 15) -> pd.DataFrame:
-        if df.empty:
-            return pd.DataFrame()
-        # Hours per user per game
-        cubed = df.groupby(["user_name", "game_name"]).size().reset_index(name="snapshots")
-        cubed["hours"] = (cubed["snapshots"] * df["minutes_per_snapshot"].median()) / 60.0
-        # Top users/games by total hours
-        top_users_idx = (
-            cubed.groupby("user_name")["hours"].sum().sort_values(ascending=False).head(top_users).index
-        )
-        top_games_idx = (
-            cubed.groupby("game_name")["hours"].sum().sort_values(ascending=False).head(top_games).index
-        )
-        filtered = cubed[cubed["user_name"].isin(top_users_idx) & cubed["game_name"].isin(top_games_idx)]
-        pivot = filtered.pivot_table(index="user_name", columns="game_name", values="hours", fill_value=0.0)
-        return pivot
-    
-    def _agg_playtime_per_game(df: pd.DataFrame) -> pd.DataFrame:
-        if df.empty:
-            return pd.DataFrame(columns=["game_name", "total_hours_played"])
-        # One snapshot = collection_interval seconds; convert to hours
-        grouped = df.groupby("game_name").size().reset_index(name="snapshots")
-        grouped["total_minutes_played"] = grouped["snapshots"] * df["minutes_per_snapshot"].median()
-        grouped["total_hours_played"] = grouped["total_minutes_played"] / 60.0
-        return grouped.sort_values("total_hours_played", ascending=False)
-
-    def _agg_daily_hours(df: pd.DataFrame) -> pd.DataFrame:
-        if df.empty:
-            return pd.DataFrame(columns=["date", "total_hours"])
-        ts = df.set_index("timestamp_dt")
-        # Count snapshots per day, convert to hours
-        daily = ts.resample("D").size().rename("snapshots").to_frame()
-        daily["total_minutes"] = daily["snapshots"] * df["minutes_per_snapshot"].median()
-        daily["total_hours"] = daily["total_minutes"] / 60.0
-        daily = daily.reset_index().rename(columns={"timestamp_dt": "date"})
-        return daily
-
-
-    def _agg_hours_by_hour_of_day(df: pd.DataFrame) -> pd.DataFrame:
-        if df.empty:
-            return pd.DataFrame(columns=["hour_of_day", "total_hours"])        
-        tmp = df.copy()
-        tmp["hour_of_day"] = tmp["timestamp_dt"].dt.hour
-        hourly = tmp.groupby("hour_of_day").size().rename("snapshots").to_frame().reset_index()
-        hourly["total_minutes"] = hourly["snapshots"] * df["minutes_per_snapshot"].median()
-        hourly["total_hours"] = hourly["total_minutes"] / 60.0
-        return hourly.sort_values("hour_of_day")
-
-    def _recent_players_df(df: pd.DataFrame, window_minutes: float = 5.5) -> pd.DataFrame:
-        """Spieler & Spiele, die innerhalb des letzten window_minutes gesehen wurden.
-
-        Liefert eindeutige Paare (user_name, game_name) -> Columns name, game.
-        Gibt leeres DF mit passender Struktur zurück, falls keine Daten.
-        """
-        if df.empty:
-            return pd.DataFrame(columns=["name", "game"])
-        now_ts = int(time.time())
-        cutoff = now_ts - int(window_minutes * 60)
-        cols = set(df.columns)
-        required = {"timestamp", "user_name", "game_name"}
-        if not required.issubset(cols):
-            return pd.DataFrame(columns=["name", "game"])
-        recent = df[df["timestamp"] >= cutoff].copy()
-        if recent.empty:
-            return pd.DataFrame(columns=["name", "game"])
-        recent = recent.dropna(subset=["user_name", "game_name"])  # Nur gültige
-        if recent.empty:
-            return pd.DataFrame(columns=["name", "game"])
-        recent_pairs = (
-            recent[["user_name", "game_name"]]
-            .drop_duplicates()
-            .rename(columns={"user_name": "name", "game_name": "game"})
-            .sort_values(["name", "game"])  # stabile Ausgabe
-        )
-        return recent_pairs.reset_index(drop=True)
-
-    def _build_user_game_network(df: pd.DataFrame, min_game_hours: float = 20.0):
-        """
-        Build a bipartite network (Users <-> Games) where:
-        - Edge weight = total hours a user played a game
-        - Game node size = total hours across all users (scaled)
-        - User node size = constant
-        - Prune games with total hours < min_game_hours
-        Returns Plotly Figure.
-        """
-        if df.empty:
-            # Empty placeholder figure
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                margin=dict(l=0, r=0, t=0, b=0)
-            ))
-
-        tmp = df.copy()
-        # Compute hours per user-game edge
-        per_edge = (
-            tmp.groupby(["user_name", "game_name"]).size().reset_index(name="snapshots")
-        )
-        minutes_per_snapshot = float(tmp["minutes_per_snapshot"].median() if not tmp["minutes_per_snapshot"].isna().all() else 5.0)
-        per_edge["hours"] = (per_edge["snapshots"] * minutes_per_snapshot) / 60.0
-
-        # Total hours per game and prune
-        game_totals = per_edge.groupby("game_name")["hours"].sum().rename("total_hours").reset_index()
-        keep_games = set(game_totals[game_totals["total_hours"] >= float(min_game_hours)]["game_name"].tolist())
-        per_edge = per_edge[per_edge["game_name"].isin(keep_games)]
-
-        if per_edge.empty:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                margin=dict(l=0, r=0, t=0, b=0)
-            ))
-
-        # Recompute totals after pruning
-        game_totals = per_edge.groupby("game_name")["hours"].sum().rename("total_hours").reset_index()
-        user_totals = per_edge.groupby("user_name")["hours"].sum().rename("total_hours").reset_index()
-
-        # Build NetworkX graph
-        G = nx.Graph()
-        # Add game nodes with attribute kind='game' and size based on total hours
-        game_hours_map = dict(zip(game_totals["game_name"], game_totals["total_hours"]))
-        for g, h in game_hours_map.items():
-            G.add_node(("game", g), kind="game", label=g, total_hours=float(h))
-        # Add user nodes with constant size, only those connected to remaining games
-        users = per_edge["user_name"].unique().tolist()
-        for u in users:
-            G.add_node(("user", u), kind="user", label=u)
-        # Add edges with weight = hours
-        for _, row in per_edge.iterrows():
-            G.add_edge(("user", row["user_name"]), ("game", row["game_name"]), weight=float(row["hours"]))
-
-        if G.number_of_edges() == 0:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                margin=dict(l=0, r=0, t=0, b=0)
-            ))
-
-        # Position using spring layout with weight influence
-        pos = nx.spring_layout(G, weight="weight", k=None, iterations=200, seed=42)
-
-        # Build per-edge traces with hover showing hours (weight)
-        weights_all = [float(d.get("weight", 1.0)) for _, _, d in G.edges(data=True)]
-        w_max = max(weights_all) if weights_all else 1.0
-        edge_traces = []
-        for u, v, d in G.edges(data=True):
-            w = float(d.get("weight", 1.0))
-            width = 1.0 + 7.0 * (w / w_max) if w_max > 0 else 4.0
-            x0, y0 = pos[u]
-            x1, y1 = pos[v]
-            u_label = G.nodes[u].get("label", str(u))
-            v_label = G.nodes[v].get("label", str(v))
-            hover_text = f"{u_label} – {v_label}: {w:.1f} h"
-            edge_traces.append(
-                go.Scatter(
-                    x=[x0, x1],
-                    y=[y0, y1],
-                    mode="lines",
-                    line=dict(width=width, color="#aaaaaa"),
-                    hoverinfo="text",
-                    text=[hover_text, hover_text],
-                    hovertemplate="%{text}<extra></extra>",
-                    opacity=0.55,
-                    showlegend=False,
-                )
-            )
-
-        # Node traces for users and games separately to manage sizes/colors
-        user_x, user_y, user_text = [], [], []
-        game_x, game_y, game_text, game_sizes = [], [], [], []
-        # Size mapping for games
-        g_hours_vals = list(game_hours_map.values())
-        g_min = min(g_hours_vals) if g_hours_vals else 0.0
-        g_max = max(g_hours_vals) if g_hours_vals else 1.0
-        # Visual size range in px
-        g_size_min, g_size_max = 12, 36
-
-        for n, attrs in G.nodes(data=True):
-            x, y = pos[n]
-            if attrs.get("kind") == "user":
-                user_x.append(x)
-                user_y.append(y)
-                user_text.append(attrs.get("label", ""))
-            else:
-                game_x.append(x)
-                game_y.append(y)
-                game_text.append(f"{attrs.get('label','')}<br>{attrs.get('total_hours',0):.1f} h total")
-                h = float(attrs.get("total_hours", 0.0))
-                if g_max > g_min:
-                    size = g_size_min + (g_size_max - g_size_min) * ((h - g_min) / (g_max - g_min))
-                else:
-                    size = (g_size_min + g_size_max) / 2
-                game_sizes.append(size)
-
-        user_trace = go.Scatter(
-            x=user_x, y=user_y,
-            mode="markers",
-            hoverinfo="text",
-            text=user_text,
-            marker=dict(
-                size=12,
-                color="#1f77b4",
-                line=dict(width=1, color="#ffffff"),
-            ),
-            name="User",
-        )
-
-        game_trace = go.Scatter(
-            x=game_x, y=game_y,
-            mode="markers",
-            hoverinfo="text",
-            text=game_text,
-            marker=dict(
-                size=game_sizes,
-                color="#ff7f0e",
-                line=dict(width=1, color="#333333"),
-            ),
-            name="Game",
-        )
-
-        fig = go.Figure(
-            data=[*edge_traces, user_trace, game_trace],
-            layout=go.Layout(
-                showlegend=True,
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                hovermode="closest",
-                margin=dict(l=10, r=10, t=10, b=10),
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-            ),
-        )
-        return fig
-
-    def _agg_total_voice_users_over_time(df: pd.DataFrame) -> pd.DataFrame:
-        """Summe der Nutzer über alle Sprachkanäle je Zeitstempel."""
-        if df.empty:
-            return pd.DataFrame(columns=["timestamp_dt", "total_users"])        
-        tmp = df.copy()
-        # user_count kann float/NaN sein -> sicher in int konvertieren
-        tmp["user_count"] = pd.to_numeric(tmp["user_count"], errors="coerce").fillna(0).astype(int)
-        aggregated = (
-            tmp.groupby("timestamp_dt")["user_count"].sum()
-            .rename("total_users").to_frame().reset_index()
-            .sort_values("timestamp_dt")
-        )
-        return aggregated
-
-    def _agg_daily_peak_voice_users(df: pd.DataFrame) -> pd.DataFrame:
-        """Tages-Peak der Gesamtnutzer in Sprachkanälen (Max je Tag)."""
-        per_ts = _agg_total_voice_users_over_time(df)
-        if per_ts.empty:
-            return pd.DataFrame(columns=["date", "total_users"])
-        tmp = per_ts.copy()
-        tmp["date"] = tmp["timestamp_dt"].dt.floor("D")
-        daily_peak = tmp.groupby("date")["total_users"].max().reset_index()
-        return daily_peak.sort_values("date")
-
-    def _build_voice_user_network(
-        df: pd.DataFrame,
-        min_shared_hours: float = 0.0,
-        min_node_size: int = 15,
-        max_node_size: int = 60,
-        min_edge_width: float = 0.5,
-        max_edge_width: float = 8.0,
-        layout_k: float = 0.6,
-        layout_iterations: int = 200,
-        layout_seed: int = 42,
-    ):
-        """Erzeugt ein interaktives Netzwerk der Discord Voice Beziehungen.
-
-        - Kanten-Gewicht = gemeinsame Voice-Stunden (Users gleichzeitig im selben Channel / Snapshot)
-        - Node-Größe = gesamte Voice-Stunden des Users
-        - Unterschiedliche Farbe je User
-        """
-        import plotly.graph_objects as go
-        import networkx as nx
-        from itertools import combinations
-        from collections import Counter
-        import plotly.express as px
-
-        if df.empty or df["user_name"].nunique() < 2:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                margin=dict(l=0, r=0, t=30, b=0),
-                title="Discord Voice User Network (keine Daten)"
-            ))
-
-        tmp = df.copy()
-        if "timestamp_dt" not in tmp.columns:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                margin=dict(l=0, r=0, t=30, b=0),
-                title="Discord Voice User Network (Fehlende timestamp_dt)"
-            ))
-
-        # Sicherstellen minutes_per_snapshot existiert
-        if "minutes_per_snapshot" not in tmp.columns or tmp["minutes_per_snapshot"].isna().all():
-            tmp["minutes_per_snapshot"] = 5.0
-
-        pair_minutes = Counter()
-        # Gruppiere nach Zeitstempel & Channel
-        for (_, _channel), group in tmp.groupby(["timestamp_dt", "channel_name"], sort=False):
-            users = sorted(group["user_name"].dropna().unique().tolist())
-            if len(users) < 2:
-                continue
-            minutes_slot = float(group["minutes_per_snapshot"].median())
-            for u1, u2 in combinations(users, 2):
-                if u1 == u2:
-                    continue
-                key = tuple(sorted((u1, u2)))
-                pair_minutes[key] += minutes_slot
-
-        if not pair_minutes:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                margin=dict(l=0, r=0, t=30, b=0),
-                title="Discord Voice User Network (keine gemeinsamen Zeiten)"
-            ))
-
-        # DataFrame aus Paaren
-        data_rows = []
-        for (u1, u2), minutes in pair_minutes.items():
-            hours = minutes / 60.0
-            if hours >= float(min_shared_hours):
-                data_rows.append({"user1": u1, "user2": u2, "shared_minutes": minutes, "shared_hours": hours})
-        pair_df = pd.DataFrame(data_rows)
-        if pair_df.empty:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                margin=dict(l=0, r=0, t=30, b=0),
-                title=f"Discord Voice User Network (Filter: >= {min_shared_hours} h)"
-            ))
-
-        # Gesamtstunden pro User
-        user_minutes = tmp.groupby("user_name")["minutes_per_snapshot"].sum().rename("total_minutes")
-        user_hours = (user_minutes / 60.0).rename("total_hours")
-        user_hours_df = user_hours.reset_index()
-        user_hours_map = dict(zip(user_hours_df["user_name"], user_hours_df["total_hours"]))
-
-        # Graph aufbauen
-        G = nx.Graph()
-        for user, hours in user_hours_map.items():
-            G.add_node(user, total_hours=float(hours))
-        for _, row in pair_df.iterrows():
-            G.add_edge(row["user1"], row["user2"], weight=float(row["shared_hours"]))
-
-        if G.number_of_edges() == 0:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                margin=dict(l=0, r=0, t=30, b=0),
-                title="Discord Voice User Network (keine Kanten)"
-            ))
-
-        pos = nx.spring_layout(G, k=layout_k, iterations=layout_iterations, seed=layout_seed, weight="weight")
-
-        # Node Größen skalieren
-        hours_vals = [float(G.nodes[n].get("total_hours", 0.0)) for n in G.nodes()]
-        h_min = min(hours_vals) if hours_vals else 0.0
-        h_max = max(hours_vals) if hours_vals else 1.0
-        def _scale(h: float):
-            if h_max > h_min:
-                return min_node_size + (max_node_size - min_node_size) * ((h - h_min) / (h_max - h_min))
-            return (min_node_size + max_node_size) / 2.0
-        node_sizes = [_scale(float(G.nodes[n].get("total_hours", 0.0))) for n in G.nodes()]
-
-        # Farben pro User
-        users = list(G.nodes())
-        palette = px.colors.qualitative.Dark24 + px.colors.qualitative.Light24 + px.colors.qualitative.Plotly
-        # Falls mehr User als Palette, wiederholen
-        colors = [palette[i % len(palette)] for i in range(len(users))]
-        color_map = {u: c for u, c in zip(users, colors)}
-
-        # Kantenbreiten skalieren
-        edge_weights = [float(d.get("weight", 0.0)) for _, _, d in G.edges(data=True)]
-        ew_min = min(edge_weights) if edge_weights else 0.0
-        ew_max = max(edge_weights) if edge_weights else 1.0
-        def _edge_scale(w: float):
-            if ew_max > ew_min:
-                return min_edge_width + (max_edge_width - min_edge_width) * ((w - ew_min) / (ew_max - ew_min))
-            return (min_edge_width + max_edge_width) / 2.0
-
-        edge_traces = []
-        for u, v, d in G.edges(data=True):
-            w = float(d.get("weight", 0.0))
-            width = _edge_scale(w)
-            x0, y0 = pos[u]
-            x1, y1 = pos[v]
-            edge_traces.append(
-                go.Scatter(
-                    x=[x0, x1], y=[y0, y1], mode="lines",
-                    line=dict(width=width, color="rgba(120,120,120,0.5)"),
-                    hoverinfo="text",
-                    text=[f"{u} – {v}<br>Gemeinsame Voice-Stunden: {w:.2f}", f"{u} – {v}<br>Gemeinsame Voice-Stunden: {w:.2f}"],
-                    hovertemplate="%{text}<extra></extra>",
-                    showlegend=False,
-                )
-            )
-
-        node_x = [pos[u][0] for u in users]
-        node_y = [pos[u][1] for u in users]
-        node_hover = [f"{u}<br>Gesamt Voice-Stunden: {user_hours_map.get(u,0):.2f}" for u in users]
-        node_trace = go.Scatter(
-            x=node_x, y=node_y, mode="markers+text",
-            hoverinfo="text", hovertext=node_hover, text=users,
-            textposition="top center",
-            marker=dict(
-                size=node_sizes,
-                color=[color_map[u] for u in users],
-                line=dict(width=1.5, color="#1f1f1f"),
-            ),
-            showlegend=False,
-        )
-
-        fig = go.Figure(
-            data=[*edge_traces, node_trace],
-            layout=go.Layout(
-                title=(
-                    "Discord Voice User Network"\
-                    "<br><span style='font-size:12px'>Kantenbreite = gemeinsame Voice-Stunden, Node-Größe = gesamte Voice-Stunden</span>"
-                ),
-                title_x=0.5,
-                margin=dict(l=10, r=10, t=60, b=10),
-                hovermode="closest",
-                showlegend=False,
-                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            ),
-        )
-        return fig
-
-    def _build_voice_24h_timeline(df: pd.DataFrame):
-        """Erzeuge eine Timeline (letzte 24h) mit zusammengefassten Voice-Sessions.
-
-        - X-Achse: Zeit (letzte 24 Stunden, Format Stunde:Minute)
-        - Y-Achse: User (alle, die in den letzten 24h in einem Voice Kanal waren)
-        - Ein Balken pro zusammenhängender Session (gleicher Channel, keine zu große Lücke)
-        - Hover zeigt Dauer und Kanal
-        """
-        import plotly.express as px
-        import plotly.graph_objects as go
-        from datetime import datetime, timedelta
-        import math
-
-        if df.empty:
-            return go.Figure(layout=dict(title="Voice Aktivität letzte 24h (keine Daten)"))
-
-        # Sicherstellen user_name existiert
-        if "user_name" not in df.columns:
-            return go.Figure(layout=dict(title="Voice Aktivität letzte 24h (fehlende user_name Spalte)"))
-
-        now_ts = int(time.time())
-        cutoff_ts = now_ts - 24 * 3600
-        mask = df["timestamp"] >= cutoff_ts
-        recent = df.loc[mask].copy()
-        if recent.empty:
-            return go.Figure(layout=dict(title="Voice Aktivität letzte 24h (keine Daten im Zeitraum)"))
-
-        # Falls timestamp_dt fehlt -> erzeugen
-        if "timestamp_dt" not in recent.columns:
-            recent["timestamp_dt"] = pd.to_datetime(recent["timestamp"], unit="s")
-
-        default_interval = float(recent["collection_interval"].dropna().median() if not recent["collection_interval"].dropna().empty else 300.0)
-        # Grenzen als datetime
-        cutoff_dt = datetime.fromtimestamp(cutoff_ts)
-        now_dt = datetime.fromtimestamp(now_ts)
-
-        sessions = []  # Sammler für Session-Dicts
-        # Gruppieren nach User (alphabetisch für stabile Y-Achse)
-        for user, g in recent.groupby("user_name"):
-            g = g.sort_values("timestamp").reset_index(drop=True)
-            current = None  # {channel, start_ts, end_ts}
-            prev_row = None
-            for _, row in g.iterrows():
-                ts = int(row["timestamp"])
-                chan = row.get("channel_name", "?") or "?"
-                interv = row.get("collection_interval")
-                try:
-                    interv = float(interv)
-                    if not math.isfinite(interv) or interv <= 0:
-                        raise ValueError
-                except Exception:
-                    interv = default_interval
-
-                # End-Annahme für einzelne Snapshot -> ts + interv
-                snapshot_end = ts + interv
-
-                if current is None:
-                    current = {
-                        "user_name": user,
-                        "channel_name": chan,
-                        "start_ts": ts,
-                        "end_ts": snapshot_end,
-                    }
-                else:
-                    gap = ts - prev_row["timestamp"] if prev_row is not None else 0
-                    prev_interv = prev_row.get("collection_interval") if prev_row is not None else default_interval
-                    try:
-                        prev_interv = float(prev_interv)
-                        if not math.isfinite(prev_interv) or prev_interv <= 0:
-                            raise ValueError
-                    except Exception:
-                        prev_interv = default_interval
-                    # Erlaube eine Lücke bis 2 * max(prev, current interv)
-                    max_gap = 2 * max(prev_interv, interv)
-                    if chan == current["channel_name"] and gap <= max_gap:
-                        # Session erweitern
-                        if snapshot_end > current["end_ts"]:
-                            current["end_ts"] = snapshot_end
-                    else:
-                        # Session abschließen
-                        if current["end_ts"] > current["start_ts"]:
-                            sessions.append(current)
-                        # Neue Session starten
-                        current = {
-                            "user_name": user,
-                            "channel_name": chan,
-                            "start_ts": ts,
-                            "end_ts": snapshot_end,
-                        }
-                prev_row = row
-            # Letzte Session flushen
-            if current is not None and current["end_ts"] > current["start_ts"]:
-                sessions.append(current)
-
-        if not sessions:
-            return go.Figure(layout=dict(title="Voice Aktivität letzte 24h (keine Sessions)"))
-
-        sess_df = pd.DataFrame(sessions)
-        # Begrenzen auf Zeitfenster (Clip), falls Session über Rand hinaus
-        sess_df["start_ts"] = sess_df["start_ts"].clip(lower=cutoff_ts)
-        sess_df["end_ts"] = sess_df["end_ts"].clip(upper=now_ts)
-        # Konvertieren zu datetime
-        sess_df["start_dt"] = pd.to_datetime(sess_df["start_ts"], unit="s")
-        sess_df["end_dt"] = pd.to_datetime(sess_df["end_ts"], unit="s")
-        # Dauer (Sek / Min / h) für Hover
-        sess_df["duration_seconds"] = (sess_df["end_ts"] - sess_df["start_ts"]).astype(float)
-        sess_df["duration_minutes"] = sess_df["duration_seconds"] / 60.0
-        sess_df["duration_hours"] = sess_df["duration_minutes"] / 60.0
-
-        # Entferne Null-/Negativ-Längen
-        sess_df = sess_df[sess_df["duration_seconds"] > 0]
-        if sess_df.empty:
-            return go.Figure(layout=dict(title="Voice Aktivität letzte 24h (keine Sessions)", height=400))
-
-        # Timeline bauen
-        fig = px.timeline(
-            sess_df,
-            x_start="start_dt",
-            x_end="end_dt",
-            y="user_name",
-            color="channel_name",
-            hover_data={
-                "channel_name": True,
-                "duration_minutes": ":.1f",
-                "duration_hours": ":.2f",
-                "start_dt": True,
-                "end_dt": True,
-            },
-            title="Voice Aktivität letzte 24h",
-        )
-        # Y-Achse alphabetisch (px.timeline kehrt standardmäßig um -> wir setzen explizit)
-        users_sorted = sorted(sess_df["user_name"].unique())
-        fig.update_yaxes(categoryorder="array", categoryarray=users_sorted, autorange="reversed", fixedrange=True)
-        # X-Achse Bereich & Format
-        fig.update_xaxes(range=[cutoff_dt, now_dt], tickformat="%H:%M", title_text="Zeit (UTC, letzte 24h)")
-        fig.update_yaxes(title_text="User")
-        fig.update_layout(
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            margin=dict(l=40, r=20, t=60, b=40),
-            hoverlabel=dict(bgcolor="white"),
-            height=max(400, min(1200, 30 * len(users_sorted))),
-        )
-        # Vertikale Linie für "Jetzt" (Workaround statt add_vline wegen datetime Mischung)
-        fig.add_shape(
-            type="line",
-            x0=now_dt,
-            x1=now_dt,
-            y0=0,
-            y1=1,
-            xref="x",
-            yref="paper",
-            line=dict(color="red", width=2, dash="dot"),
-        )
-        fig.add_annotation(
-            x=now_dt,
-            y=1,
-            xref="x",
-            yref="paper",
-            showarrow=False,
-            text="Jetzt",
-            align="right",
-            yanchor="bottom",
-            font=dict(color="red"),
-        )
-        return fig
+    # Alle Aggregations-/Builder-Funktionen stammen nun aus web_aggregations
 
 
     # Build figures once at load time (no auto-refresh)
     df_steam_game_activity_initial = _load_df_steam_game_activity(force=True)
-    # Preload other DataFrames as well
     df_discord_voice_activity_initial = _load_df_discord_voice_activity(force=True)
     df_discord_voice_channels_initial = _load_df_discord_voice_channels(force=True)
     df_discord_game_activity_initial = _load_df_discord_game_activity(force=True)
-    # 24h Voice Timeline initial
-    fig_voice_24h_timeline_initial = _build_voice_24h_timeline(df_discord_voice_activity_initial)
+    fig_voice_24h_timeline_initial = build_voice_24h_timeline(df_discord_voice_activity_initial)
 
     # Ermittlung globaler Min/Max-Datum für DatePicker
     from datetime import date, timedelta
@@ -757,7 +80,7 @@ def create_app(database: Database):
     default_top_n_games = 40
 
     # 1) Bar: playtime per game (Initial – wird durch Callback aktualisiert)
-    per_game = _agg_playtime_per_game(df_steam_game_activity_initial)
+    per_game = agg_playtime_per_game(df_steam_game_activity_initial)
     fig_bar = px.bar(per_game.head(default_top_n_games), x="total_hours_played", y="game_name", orientation="h", color="game_name")
     fig_bar.update_layout(showlegend=False, xaxis_title="Stunden", yaxis_title="Spiel")
     # Dynamische Höhe für viele Kategorien, damit die Eltern-Div scrollen kann
@@ -771,7 +94,7 @@ def create_app(database: Database):
     fig_pie.update_layout(margin=dict(l=0, r=0, t=0, b=0))
 
     # 2) Line: total time per day
-    daily = _agg_daily_hours(df_steam_game_activity_initial)
+    daily = agg_daily_hours(df_steam_game_activity_initial)
     # Lücken nicht auf 0 zeichnen: 0-Stunden auf None setzen, damit die Linie unterbrochen wird
     daily_no_gap = daily.copy()
     if not daily_no_gap.empty and "total_hours" in daily_no_gap.columns:
@@ -783,7 +106,7 @@ def create_app(database: Database):
     fig_line.update_layout(xaxis_title="Datum", yaxis_title="Stunden pro Tag")
 
     # 3) Heatmap user vs top games
-    heat = _agg_heatmap_user_top_games(df_steam_game_activity_initial)
+    heat = agg_heatmap_user_top_games(df_steam_game_activity_initial)
     if heat.empty:
         fig_heat = px.imshow([[0]], labels=dict(x="Spiel", y="Nutzer", color="Stunden"))
         fig_heat.update_xaxes(visible=False)
@@ -803,7 +126,7 @@ def create_app(database: Database):
     fig_heat.update_yaxes(fixedrange=True)
 
     # 4) Vertical bar: hours by hour of day
-    by_hour = _agg_hours_by_hour_of_day(df_steam_game_activity_initial)
+    by_hour = agg_hours_by_hour_of_day(df_steam_game_activity_initial)
     fig_hour = px.bar(by_hour, x="hour_of_day", y="total_hours")
     # Nur horizontale Auswahl erlauben (Selection entlang X), vertikale Achse fix
     fig_hour.update_layout(dragmode="select", selectdirection="h")
@@ -811,11 +134,11 @@ def create_app(database: Database):
     fig_hour.update_layout(xaxis_title="Stunde (0-23)", yaxis_title="Stunden")
 
     # 4b) Tabelle: Aktive Spieler letzte 5.5 Minuten
-    recent_players_initial = _recent_players_df(df_steam_game_activity_initial)
+    recent_players_initial = recent_players_df(df_steam_game_activity_initial)
     recent_players_data_initial = recent_players_initial.to_dict("records")
 
     # 5) Punkte: Tages-Peaks der Gesamtnutzer in Sprachkanälen
-    voice_users_daily_peak = _agg_daily_peak_voice_users(df_discord_voice_channels_initial)
+    voice_users_daily_peak = agg_daily_peak_voice_users(df_discord_voice_channels_initial)
     # Balken statt Punkte für Tages-Peaks
     fig_voice_users = px.bar(voice_users_daily_peak, x="date", y="total_users")
     # Nur horizontale Auswahl erlauben (Selection entlang X), vertikale Achse fix
@@ -831,13 +154,14 @@ def create_app(database: Database):
             df_steam_game_activity_initial["game_name"].isin(top_games_initial)
         ] if top_games_initial else df_steam_game_activity_initial
     )
-    fig_network = _build_user_game_network(network_df_initial, min_game_hours=0.0)
+    fig_network = build_user_game_network(network_df_initial, min_game_hours=0.0)
 
     app.layout = html.Div(
         [
+            # Header / Controls
             html.Div(
                 [
-                    html.H1("GNAG Stats", style={"textAlign": "center"}),
+                    html.H1("GNAG Stats", className="text-3xl font-bold tracking-tight text-brand-700 text-center w-full"),
                     html.Div(
                         [
                             html.Label("Zeitraum:"),
@@ -847,7 +171,7 @@ def create_app(database: Database):
                                 max_date_allowed=max_date_global,
                                 start_date=min_date_global,
                                 end_date=max_date_global,
-                                first_day_of_week=1,  # Monday
+                                first_day_of_week=1,
                                 display_format="YYYY-MM-DD",
                                 minimum_nights=0,
                             ),
@@ -860,269 +184,181 @@ def create_app(database: Database):
                                         max=40,
                                         step=1,
                                         value=default_top_n_games,
-                                        marks={3:"3", 5: "5", 10: "10", 20: "20", 30: "30", 40: "40"},
+                                        marks={3:"3",5:"5",10:"10",20:"20",30:"30",40:"40"},
                                         tooltip={"placement": "bottom", "always_visible": False},
                                     ),
                                 ],
-                                style={"minWidth": "260px", "flex": "1"},
+                                className="flex-1 min-w-[260px]",
                             ),
                         ],
-                        style={
-                            "display": "flex",
-                            "gap": "1rem",
-                            "alignItems": "center",
-                            "flexWrap": "wrap",
-                            "marginBottom": "1em",
-                            "alignContent": "center",
-                            "width": "100%",
-                        },
+                        className="flex flex-wrap items-center gap-4 w-full mb-4",
                     ),
                 ],
-                style={
-                    "position": "sticky",
-                    "top": "0",
-                    "background": "white",
-                    "zIndex": 100,
-                    "paddingTop": "1em",
-                    "paddingLeft": "2em",
-                    "paddingRight": "2em",
-                    "paddingBottom": "0.5em",
-                    "boxShadow": "0 2px 8px rgba(0,0,0,0.04)",
-                },
+                className="sticky top-0 bg-white z-50 pt-4 px-8 pb-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80 border-b border-gray-200",
             ),
+
+            # Spielzeit pro Spiel
             html.Div(
                 [
-                    html.H2("Spielzeit pro Spiel", id="hdr-playtime-per-game"),
+                    html.H2("Spielzeit pro Spiel", id="hdr-playtime-per-game", className="text-xl font-semibold mb-4"),
                     html.Div(
                         [
                             html.Div(
                                 dcc.Graph(id="graph-playtime-per-game", figure=fig_bar),
-                                style={
-                                    "flex": "1",
-                                    "minWidth": 0,
-                                    # Nur vertikal scrollen, um viele Labels zu handeln
-                                    "height": "600px",
-                                    "overflowY": "auto",
-                                    "overflowX": "hidden",
-                                },
+                                className="flex-1 min-w-0 h-[600px] overflow-y-auto overflow-x-hidden md:w-full",
                             ),
                             html.Div(
                                 dcc.Graph(id="graph-playtime-pie", figure=fig_pie),
-                                style={"flex": "1", "minWidth": 0},
+                                className="flex-1 min-w-0 md:w-full",
                             ),
                         ],
-                        style={"display": "flex", "gap": "1rem", "alignItems": "stretch"},
+                        className="flex flex-col md:flex-row gap-4 items-stretch",
                     ),
                 ],
-                style={"marginBottom": "2em"},
+                className="mb-8",
             ),
+
+            # Gesamtzeit pro Tag
             html.Div(
                 [
-                    html.H2("Gesamtzeit pro Tag", id="hdr-daily"),
+                    html.H2("Gesamtzeit pro Tag", id="hdr-daily", className="text-xl font-semibold mb-4"),
                     dcc.Graph(
                         id="graph-daily-time",
                         figure=fig_line,
                         config={
                             "displaylogo": False,
                             "scrollZoom": False,
-                            "modeBarButtonsToRemove": [
-                                "zoom2d",
-                                "pan2d",
-                                "lasso2d",
-                                "zoomIn2d",
-                                "zoomOut2d",
-                                "autoScale2d",
-                                "resetScale2d",
-                            ],
+                            "modeBarButtonsToRemove": ["zoom2d","pan2d","lasso2d","zoomIn2d","zoomOut2d","autoScale2d","resetScale2d"],
                         },
                     ),
                 ],
-                style={"marginBottom": "2em"},
+                className="mb-8",
             ),
+
+            # Heatmap
             html.Div(
                 [
-                    html.H2("Spielzeit Nutzer vs. Top-Spiele", id="hdr-heatmap-user-game"),
+                    html.H2("Spielzeit Nutzer vs. Top-Spiele", id="hdr-heatmap-user-game", className="text-xl font-semibold mb-4"),
                     dcc.Graph(
                         id="graph-heatmap-user-game",
                         figure=fig_heat,
                         config={
                             "displaylogo": False,
                             "scrollZoom": False,
-                            "modeBarButtonsToRemove": [
-                                "zoom2d",
-                                "pan2d",
-                                "select2d",
-                                "lasso2d",
-                                "zoomIn2d",
-                                "zoomOut2d",
-                                "autoScale2d",
-                                "resetScale2d",
-                            ],
+                            "modeBarButtonsToRemove": ["zoom2d","pan2d","select2d","lasso2d","zoomIn2d","zoomOut2d","autoScale2d","resetScale2d"],
                         },
                     ),
                 ],
-                style={"marginBottom": "2em"},
+                className="mb-8",
             ),
+
+            # Stunden nach Tagesstunde + Aktive Gamer
             html.Div(
                 [
-                    # Flex-Container mit zwei Spalten: Links aktive Gamer Tabelle, rechts Titel + Graph
                     html.Div(
                         [
                             html.Div(
                                 [
-                                    html.H2("Spielzeit nach Tagesstunde", id="hdr-by-hour", style={"marginTop": 0}),
+                                    html.H2("Spielzeit nach Tagesstunde", id="hdr-by-hour", className="text-xl font-semibold"),
                                     dcc.Graph(
                                         id="graph-by-hour",
                                         figure=fig_hour,
                                         config={
                                             "displaylogo": False,
                                             "scrollZoom": False,
-                                            "modeBarButtonsToRemove": [
-                                                "zoom2d",
-                                                "pan2d",
-                                                "lasso2d",
-                                                "zoomIn2d",
-                                                "zoomOut2d",
-                                                "autoScale2d",
-                                                "resetScale2d",
-                                            ],
+                                            "modeBarButtonsToRemove": ["zoom2d","pan2d","lasso2d","zoomIn2d","zoomOut2d","autoScale2d","resetScale2d"],
                                         },
                                     ),
                                 ],
-                                style={
-                                    "flex": "1",
-                                    "minWidth": 0,
-                                    "display": "flex",
-                                    "flexDirection": "column",
-                                    "gap": "0.5rem",
-                                },
+                                className="flex flex-col gap-2 flex-1 min-w-0 md:w-full",
                             ),
                             html.Div(
                                 [
-                                    html.H2("Aktive Gamer", style={"marginTop": 0}),
+                                    html.H2("Aktive Gamer", className="text-xl font-semibold"),
                                     dash_table.DataTable(
                                         id="table-recent-players",
-                                        columns=[
-                                            {"name": "Name", "id": "name"},
-                                            {"name": "Spiel", "id": "game"},
-                                        ],
+                                        columns=[{"name": "Name", "id": "name"},{"name": "Spiel", "id": "game"}],
                                         data=recent_players_data_initial,
-                                        style_table={
-                                            "height": "600px",
-                                            "overflowY": "auto",
-                                        },
-                                        style_cell={
-                                            "padding": "4px 8px",
-                                            "textAlign": "left",
-                                            "fontSize": "13px",
-                                        },
-                                        style_header={
-                                            "backgroundColor": "#f5f5f5",
-                                            "fontWeight": "bold",
-                                        },
+                                        style_table={"height": "600px", "overflowY": "auto"},
+                                        style_cell={"padding": "4px 8px", "textAlign": "left", "fontSize": "13px"},
+                                        style_header={"backgroundColor": "#f5f5f5", "fontWeight": "bold"},
                                         page_action="none",
                                         sort_action="native",
                                         filter_action="none",
                                     ),
                                 ],
-                                style={
-                                    "flex": "1",
-                                    "minWidth": 0,
-                                    "display": "flex",
-                                    "flexDirection": "column",
-                                },
+                                className="flex flex-col flex-1 min-w-0 md:w-full",
                             ),
                         ],
-                        style={
-                            "display": "flex",
-                            "gap": "1rem",
-                            "alignItems": "stretch",
-                            "marginBottom": "2em",
-                        },
+                        className="flex flex-col md:flex-row gap-4 items-stretch mb-8",
                     ),
                 ]
             ),
+
+            # Voice Nutzer Peaks
             html.Div(
                 [
-                    html.H2("Tages-Peaks der Gesamtnutzer in Sprachkanälen", id="hdr-voice-users-over-time"),
+                    html.H2("Tages-Peaks der Gesamtnutzer in Sprachkanälen", id="hdr-voice-users-over-time", className="text-xl font-semibold mb-4"),
                     dcc.Graph(
                         id="graph-voice-users-over-time",
                         figure=fig_voice_users,
                         config={
                             "displaylogo": False,
                             "scrollZoom": False,
-                            "modeBarButtonsToRemove": [
-                                "zoom2d",
-                                "pan2d",
-                                "lasso2d",
-                                "zoomIn2d",
-                                "zoomOut2d",
-                                "autoScale2d",
-                                "resetScale2d",
-                            ],
+                            "modeBarButtonsToRemove": ["zoom2d","pan2d","lasso2d","zoomIn2d","zoomOut2d","autoScale2d","resetScale2d"],
                         },
                     ),
                 ],
-                style={"marginBottom": "2em"},
+                className="mb-8",
             ),
+
+            # Nutzer-Spiel Netzwerk
             html.Div(
                 [
-                    html.H2("Nutzer–Spiel Netzwerk", id="hdr-user-game-network"),
+                    html.H2("Nutzer–Spiel Netzwerk", id="hdr-user-game-network", className="text-xl font-semibold mb-4"),
                     dcc.Graph(
                         id="graph-user-game-network",
                         figure=fig_network,
-                        config={
-                            "displaylogo": False,
-                            "scrollZoom": False,
-                            "displayModeBar": True,
-                        },
-                        style={"height": "700px"},
+                        config={"displaylogo": False, "scrollZoom": False, "displayModeBar": True},
+                        className="h-[700px]",
                     ),
                 ],
-                style={"marginBottom": "2em"},
+                className="mb-8",
             ),
+
+            # Voice User Netzwerk
             html.Div(
                 [
-                    html.H2("Discord Voice Nutzer Netzwerk", id="hdr-voice-user-network"),
+                    html.H2("Discord Voice Nutzer Netzwerk", id="hdr-voice-user-network", className="text-xl font-semibold mb-4"),
                     dcc.Graph(
                         id="graph-voice-user-network",
-                        figure=_build_voice_user_network(df_discord_voice_activity_initial),
-                        config={
-                            "displaylogo": False,
-                            "scrollZoom": False,
-                            "displayModeBar": True,
-                        },
-                        style={"height": "700px"},
+                        figure=build_voice_user_network(df_discord_voice_activity_initial),
+                        config={"displaylogo": False, "scrollZoom": False, "displayModeBar": True},
+                        className="h-[700px]",
                     ),
                 ],
-                style={"marginBottom": "2em"},
+                className="mb-8",
             ),
+
+            # 24h Timeline
             html.Div(
                 [
-                    html.H2("Voice Aktivität (letzte 24h)", id="hdr-voice-24h-timeline"),
+                    html.H2("Voice Aktivität (letzte 24h)", id="hdr-voice-24h-timeline", className="text-xl font-semibold mb-4"),
                     dcc.Graph(
                         id="graph-voice-24h-timeline",
                         figure=fig_voice_24h_timeline_initial,
                         config={
                             "displaylogo": False,
                             "scrollZoom": True,
-                            "modeBarButtonsToRemove": [
-                                "zoom2d",
-                                "pan2d",
-                                "lasso2d",
-                                "zoomIn2d",
-                                "zoomOut2d",
-                                "autoScale2d",
-                                "resetScale2d",
-                            ],
+                            "modeBarButtonsToRemove": ["zoom2d","pan2d","lasso2d","zoomIn2d","zoomOut2d","autoScale2d","resetScale2d"],
                         },
-                        style={"height": "600px"},
+                        className="h-[600px]",
                     ),
                 ],
-                style={"marginBottom": "2em"},
+                className="mb-8",
             ),
         ],
-        style={"fontFamily": "Arial, sans-serif", "margin": "2em"},
+        className="container mx-auto px-4 lg:px-8 font-sans my-8",
     )
 
     # Callback zur Aktualisierung aller Diagramme anhand des gewählten Datumsbereichs
@@ -1145,7 +381,6 @@ def create_app(database: Database):
         """Update all graphs when date range or top-n changes."""
         import plotly.express as px  # Lokal, falls Dash Hot Reload
         import plotly.graph_objects as go
-        # Laden (ggf. Cache)
         df_steam = _load_df_steam_game_activity()
         df_voice_channels = _load_df_discord_voice_channels()
         df_voice_activity = _load_df_discord_voice_activity()
@@ -1154,10 +389,9 @@ def create_app(database: Database):
         def _filter(df: pd.DataFrame):
             if df.empty or start_date is None or end_date is None or "timestamp_dt" not in df.columns:
                 return df
-            # end_date inklusiv -> +1 Tag exklusiv
             try:
                 start = pd.to_datetime(start_date)
-                end = pd.to_datetime(end_date) + pd.Timedelta(days=1)
+                end = pd.to_datetime(end_date) + pd.Timedelta(days=1)  # end_date inklusiv
             except Exception:
                 return df
             return df[(df["timestamp_dt"] >= start) & (df["timestamp_dt"] < end)]
@@ -1166,7 +400,7 @@ def create_app(database: Database):
         df_voice_channels_f = _filter(df_voice_channels)
 
         # Re-Aggregationen (Top-N Spiele bestimmen)
-        per_game_f = _agg_playtime_per_game(df_steam_f)
+        per_game_f = agg_playtime_per_game(df_steam_f)
         if top_n is None:
             top_n = default_top_n_games
         try:
@@ -1174,7 +408,6 @@ def create_app(database: Database):
         except Exception:
             top_n_int = default_top_n_games
         top_games = per_game_f.head(top_n_int)["game_name"].tolist() if not per_game_f.empty else []
-        # Gefiltertes Steam-DF nur mit Top-N Spielen für Diagramme
         if top_games:
             df_steam_top = df_steam_f[df_steam_f["game_name"].isin(top_games)]
         else:
@@ -1192,7 +425,7 @@ def create_app(database: Database):
         fig_pie_f = px.pie(per_game_top, values="total_hours_played", names="game_name")
         fig_pie_f.update_layout(margin=dict(l=0, r=0, t=0, b=0))
 
-        daily_f = _agg_daily_hours(df_steam_top)
+        daily_f = agg_daily_hours(df_steam_top)
         daily_no_gap_f = daily_f.copy()
         if not daily_no_gap_f.empty and "total_hours" in daily_no_gap_f.columns:
             daily_no_gap_f.loc[daily_no_gap_f["total_hours"] <= 0, "total_hours"] = None
@@ -1201,7 +434,7 @@ def create_app(database: Database):
         fig_line_f.update_yaxes(fixedrange=True)
         fig_line_f.update_layout(xaxis_title="Datum", yaxis_title="Stunden pro Tag")
 
-        heat_f = _agg_heatmap_user_top_games(df_steam_top, top_games=top_n_int)
+        heat_f = agg_heatmap_user_top_games(df_steam_top, top_games=top_n_int)
         if heat_f.empty:
             fig_heat_f = px.imshow([[0]], labels=dict(x="Spiel", y="Nutzer", color="Stunden"))
             fig_heat_f.update_xaxes(visible=False)
@@ -1219,31 +452,26 @@ def create_app(database: Database):
         fig_heat_f.update_xaxes(fixedrange=True)
         fig_heat_f.update_yaxes(fixedrange=True)
 
-        by_hour_f = _agg_hours_by_hour_of_day(df_steam_top)
+        by_hour_f = agg_hours_by_hour_of_day(df_steam_top)
         fig_hour_f = px.bar(by_hour_f, x="hour_of_day", y="total_hours")
         fig_hour_f.update_layout(dragmode="select", selectdirection="h")
         fig_hour_f.update_yaxes(fixedrange=True)
         fig_hour_f.update_layout(xaxis_title="Stunde (0-23)", yaxis_title="Stunden")
 
-        voice_users_daily_peak_f = _agg_daily_peak_voice_users(df_voice_channels_f)
-        # Balken statt Punkte für Tages-Peaks
+        voice_users_daily_peak_f = agg_daily_peak_voice_users(df_voice_channels_f)
         fig_voice_users_f = px.bar(voice_users_daily_peak_f, x="date", y="total_users")
         fig_voice_users_f.update_layout(dragmode="select", selectdirection="h")
         fig_voice_users_f.update_yaxes(fixedrange=True)
         fig_voice_users_f.update_layout(xaxis_title="Datum", yaxis_title="Peak Nutzer/Tag")
 
-        # Netzwerk (verwende Steam Game Activity DataFrame – gleiche Filter)
         network_df = df_steam_top
-        fig_network_f = _build_user_game_network(network_df, min_game_hours=0.0)
-        # Voice User Netzwerk
+        fig_network_f = build_user_game_network(network_df, min_game_hours=0.0)
         df_voice_activity_f = _filter(df_voice_activity)
-        fig_voice_user_network_f = _build_voice_user_network(df_voice_activity_f)
-        # 24h Timeline (immer unfiltriert über letzten 24h Bereich, unabhängig vom gewählten Zeitraum)
-        fig_voice_24h_timeline_f = _build_voice_24h_timeline(df_voice_activity)
+        fig_voice_user_network_f = build_voice_user_network(df_voice_activity_f)
+        fig_voice_24h_timeline_f = build_voice_24h_timeline(df_voice_activity)
 
-        # Tabelle aktuelle Spieler (immer gegen ungefiltertes df_steam, damit wirklich "jetzt")
-        recent_players_df = _recent_players_df(df_steam)
-        recent_players_data = recent_players_df.to_dict("records") if not recent_players_df.empty else []
+        recent_players_latest = recent_players_df(df_steam)
+        recent_players_data = recent_players_latest.to_dict("records") if not recent_players_latest.empty else []
 
         return [
             fig_bar_f,
