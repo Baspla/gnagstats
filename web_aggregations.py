@@ -220,12 +220,64 @@ def build_voice_user_network(df: pd.DataFrame, min_shared_hours: float = 0.0, mi
         return (min_edge_width + max_edge_width) / 2.0
     edge_traces = []
     for u, v, d in G.edges(data=True):
-        w = float(d.get("weight", 0.0)); width = _edge_scale(w); x0, y0 = pos[u]; x1, y1 = pos[v]
-        edge_traces.append(go.Scatter(x=[x0, x1], y=[y0, y1], mode="lines", line=dict(width=width, color="rgba(120,120,120,0.5)"), hoverinfo="text", text=[f"{u} – {v}<br>Gemeinsame Voice-Stunden: {w:.2f}"], hovertemplate="%{text}<extra></extra>", showlegend=False))
-    node_x=[pos[u][0] for u in users]; node_y=[pos[u][1] for u in users]
-    node_hover=[f"{u}<br>Gesamt Voice-Stunden: {user_hours_map.get(u,0):.2f}" for u in users]
-    node_trace = go.Scatter(x=node_x, y=node_y, mode="markers+text", hoverinfo="text", hovertext=node_hover, text=users, textposition="top center", marker=dict(size=node_sizes, color=[color_map[u] for u in users], line=dict(width=1.5, color="#1f1f1f")), showlegend=False)
-    fig = go.Figure(data=[*edge_traces, node_trace], layout=go.Layout(title=("Discord Voice User Network""<br><span style='font-size:12px'>Kantenbreite = gemeinsame Voice-Stunden, Node-Größe = gesamte Voice-Stunden</span>"), title_x=0.5, margin=dict(l=10, r=10, t=60, b=10), hovermode="closest", showlegend=False, xaxis=dict(showgrid=False, zeroline=False, showticklabels=False), yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)))
+        w = float(d.get("weight", 0.0))
+        width = _edge_scale(w)
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        # Calculate midpoint for hover text display
+        xm, ym = (x0 + x1) / 2, (y0 + y1) / 2
+        hover_text = f"{u} – {v}<br>Gemeinsame Voice-Stunden: {w:.2f}"
+        # Edge line
+        edge_traces.append(
+            go.Scatter(
+                x=[x0, x1],
+                y=[y0, y1],
+                mode="lines",
+                line=dict(width=width, color="rgba(120,120,120,0.5)"),
+                hoverinfo="none",
+                showlegend=False
+            )
+        )
+        # Edge label at midpoint
+        edge_traces.append(
+            go.Scatter(
+                x=[xm],
+                y=[ym],
+                mode="text",
+                text=[hover_text],
+                textposition="middle center",
+                hoverinfo="none",
+                showlegend=False,
+                textfont=dict(size=11, color="rgba(80,80,80,0.85)")
+            )
+        )
+    node_x = [pos[u][0] for u in users]
+    node_y = [pos[u][1] for u in users]
+    node_hover = [f"{u}<br>Gesamt Voice-Stunden: {user_hours_map.get(u,0):.2f}" for u in users]
+    node_trace = go.Scatter(
+        x=node_x,
+        y=node_y,
+        mode="markers+text",
+        hoverinfo="text",
+        hovertext=node_hover,
+        text=users,
+        textposition="top center",
+        marker=dict(size=node_sizes, color=[color_map[u] for u in users], line=dict(width=1.5, color="#1f1f1f")),
+        showlegend=False
+    )
+    fig = go.Figure(
+        data=[*edge_traces, node_trace],
+        layout=go.Layout(
+            title=("Discord Voice User Network"
+                   "<br><span style='font-size:12px'>Kantenbreite = gemeinsame Voice-Stunden, Node-Größe = gesamte Voice-Stunden</span>"),
+            title_x=0.5,
+            margin=dict(l=10, r=10, t=60, b=10),
+            hovermode="closest",
+            showlegend=False,
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)
+        )
+    )
     return fig
 
 
