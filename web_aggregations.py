@@ -240,9 +240,12 @@ def build_voice_24h_timeline(df: pd.DataFrame) -> go.Figure:
     if recent.empty:
         return go.Figure(layout=dict(title="Voice Aktivität letzte 24h (keine Daten im Zeitraum)"))
     if "timestamp_dt" not in recent.columns:
-        recent["timestamp_dt"] = pd.to_datetime(recent["timestamp"], unit="s")
+        # interpret POSIX timestamps as UTC and convert to Europe/Berlin for plotting
+        recent["timestamp_dt"] = pd.to_datetime(recent["timestamp"], unit="s", utc=True).dt.tz_convert("Europe/Berlin")
     default_interval = float(recent["collection_interval"].dropna().median() if not recent["collection_interval"].dropna().empty else 300.0)
-    cutoff_dt = datetime.fromtimestamp(cutoff_ts); now_dt = datetime.fromtimestamp(now_ts)
+    # make timezone-aware datetimes in Europe/Berlin so the timeline and the "Jetzt" marker align
+    cutoff_dt = pd.to_datetime(cutoff_ts, unit="s", utc=True).tz_convert("Europe/Berlin")
+    now_dt = pd.to_datetime(now_ts, unit="s", utc=True).tz_convert("Europe/Berlin")
     sessions = []
     for user, g in recent.groupby("user_name"):
         g = g.sort_values("timestamp").reset_index(drop=True)
@@ -277,7 +280,9 @@ def build_voice_24h_timeline(df: pd.DataFrame) -> go.Figure:
         return go.Figure(layout=dict(title="Voice Aktivität letzte 24h (keine Sessions)"))
     sess_df = pd.DataFrame(sessions)
     sess_df["start_ts"] = sess_df["start_ts"].clip(lower=cutoff_ts); sess_df["end_ts"] = sess_df["end_ts"].clip(upper=now_ts)
-    sess_df["start_dt"] = pd.to_datetime(sess_df["start_ts"], unit="s"); sess_df["end_dt"] = pd.to_datetime(sess_df["end_ts"], unit="s")
+    # create tz-aware datetimes: timestamps are POSIX epoch (UTC), convert to Europe/Berlin for plotting
+    sess_df["start_dt"] = pd.to_datetime(sess_df["start_ts"], unit="s", utc=True).dt.tz_convert("Europe/Berlin")
+    sess_df["end_dt"] = pd.to_datetime(sess_df["end_ts"], unit="s", utc=True).dt.tz_convert("Europe/Berlin")
     sess_df["duration_seconds"] = (sess_df["end_ts"] - sess_df["start_ts"]).astype(float)
     sess_df["duration_minutes"] = sess_df["duration_seconds"] / 60.0; sess_df["duration_hours"] = sess_df["duration_minutes"] / 60.0
     sess_df = sess_df[sess_df["duration_seconds"] > 0]
