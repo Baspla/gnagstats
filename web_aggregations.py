@@ -221,7 +221,7 @@ def build_voice_user_network(df: pd.DataFrame, min_shared_hours: float = 0.0, mi
     edge_traces = []
     for u, v, d in G.edges(data=True):
         w = float(d.get("weight", 0.0)); width = _edge_scale(w); x0, y0 = pos[u]; x1, y1 = pos[v]
-        edge_traces.append(go.Scatter(x=[x0, x1], y=[y0, y1], mode="lines", line=dict(width=width, color="rgba(120,120,120,0.5)"), hoverinfo="text", text=[f"{u} – {v}<br>Gemeinsame Voice-Stunden: {w:.2f}", f"{u} – {v}<br>Gemeinsame Voice-Stunden: {w:.2f}"], hovertemplate="%{text}<extra></extra>", showlegend=False))
+        edge_traces.append(go.Scatter(x=[x0, x1], y=[y0, y1], mode="lines", line=dict(width=width, color="rgba(120,120,120,0.5)"), hoverinfo="text", text=[f"{u} – {v}<br>Gemeinsame Voice-Stunden: {w:.2f}"], hovertemplate="%{text}<extra></extra>", showlegend=False))
     node_x=[pos[u][0] for u in users]; node_y=[pos[u][1] for u in users]
     node_hover=[f"{u}<br>Gesamt Voice-Stunden: {user_hours_map.get(u,0):.2f}" for u in users]
     node_trace = go.Scatter(x=node_x, y=node_y, mode="markers+text", hoverinfo="text", hovertext=node_hover, text=users, textposition="top center", marker=dict(size=node_sizes, color=[color_map[u] for u in users], line=dict(width=1.5, color="#1f1f1f")), showlegend=False)
