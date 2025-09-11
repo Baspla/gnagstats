@@ -66,14 +66,13 @@ def create_app(database: Database):
 
     # Ermittlung globaler Min/Max-Datum für DatePicker
     from datetime import date, timedelta
+    
+    max_date_global = date.today()
     if not df_steam_game_activity_initial.empty:
         min_date_global = df_steam_game_activity_initial["timestamp_dt"].min().date()
-        max_date_global = df_steam_game_activity_initial["timestamp_dt"].max().date()
     elif not df_discord_voice_channels_initial.empty:
         min_date_global = df_discord_voice_channels_initial["timestamp_dt"].min().date()
-        max_date_global = df_discord_voice_channels_initial["timestamp_dt"].max().date()
     else:
-        max_date_global = date.today()
         min_date_global = max_date_global - timedelta(days=30)
 
     # Default für Top-N Spiele (wird durch Slider steuerbar)
