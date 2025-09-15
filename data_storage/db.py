@@ -605,3 +605,33 @@ def timesteps_to_human_readable(timesteps: int, collection_interval: int = None)
 
     return output.strip()
 
+def minutes_to_human_readable(total_minutes: int):
+    """
+    Konvertiert eine Anzahl von Minuten in ein menschenlesbares Format.
+    :param total_minutes:
+    :return:
+    """
+    logging.debug(f"Converting {total_minutes} minutes to human-readable format.")
+    if not total_minutes:
+        return "0 Minuten"
+    days = total_minutes // (24 * 60)
+    hours = (total_minutes % (24 * 60)) // 60
+    minutes = total_minutes % 60
+    output = ""
+
+    if days == 1:
+        output += f"{days} Tag "
+    elif days > 1:
+        output += f"{days} Tage "
+
+    if hours == 1:
+        output += f"{hours} Stunde "
+    elif hours > 1:
+        output += f"{hours} Stunden "
+
+    if minutes == 1:
+        output += f"{minutes} Minute"
+    elif minutes > 1:
+        output += f"{minutes} Minuten"
+
+    return output.strip()
