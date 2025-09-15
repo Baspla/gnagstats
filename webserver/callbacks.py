@@ -35,9 +35,9 @@ def register_callbacks(app, data_provider: DataProvider):
 		bundle = data_provider.load_all(params)
 		df_voice_intervals = bundle["voice_intervals"]
 		if df_voice_intervals.empty:
-			return px.timeline(pd.DataFrame(columns=['user_name', 'start_dt', 'end_dt']), x_start='start_dt', x_end='end_dt', y='user_name', title='Sprachaktivität der letzten 24 Stunden')
+			return px.timeline(pd.DataFrame(columns=['user_name', 'start_dt', 'end_dt', 'channel_name']), x_start='start_dt', x_end='end_dt', y='user_name', color='channel_name', title='Sprachaktivität der letzten 24 Stunden')
 		df_voice_intervals['start_dt'] = pd.to_datetime(df_voice_intervals['start_ts'], unit='s')
 		df_voice_intervals['end_dt'] = pd.to_datetime(df_voice_intervals['end_ts'], unit='s')
-		fig = px.timeline(df_voice_intervals, x_start='start_dt', x_end='end_dt', y='user_name', title='Sprachaktivität der letzten 24 Stunden')
+		fig = px.timeline(df_voice_intervals, x_start='start_dt', x_end='end_dt', y='user_name', color='channel_name', title='Sprachaktivität der letzten 24 Stunden')
 		fig.update_yaxes(autorange="reversed") # Damit die neuesten Einträge oben sind
 		return fig
