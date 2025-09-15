@@ -199,7 +199,7 @@ class NewsletterCreator:
         past_start = month_start
         past_end = month_end
 
-        env = Environment(loader=FileSystemLoader('templates'),
+        env = Environment(loader=FileSystemLoader('newsletter/templates'),
                           autoescape=True,
                           trim_blocks=True,
                           lstrip_blocks=True)
