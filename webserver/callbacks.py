@@ -27,13 +27,25 @@ def register_callbacks(app, data_provider: DataProvider):
 			return px.pie(names=['Keine Daten'], values=[1], title='Spielzeit pro Spiel')
 
 		playtime = df_games.groupby('game_name')['minutes_per_snapshot'].sum().reset_index()
-		playtime = playtime.sort_values('minutes_per_snapshot', ascending=False).head(10)
-		playtime['spielzeit'] = playtime['minutes_per_snapshot'].apply(minutes_to_human_readable)
+		playtime = playtime.sort_values('minutes_per_snapshot', ascending=False)
+		top_n = 10
+		top_games = playtime.head(top_n)
+		other_games = playtime.iloc[top_n:]
+		if not other_games.empty:
+			others_row = pd.DataFrame({
+				'game_name': ['Others'],
+				'minutes_per_snapshot': [other_games['minutes_per_snapshot'].sum()]
+			})
+			playtime_final = pd.concat([top_games, others_row], ignore_index=True)
+		else:
+			playtime_final = top_games
+
+		playtime_final['spielzeit'] = playtime_final['minutes_per_snapshot'].apply(minutes_to_human_readable)
 		fig = px.pie(
-			playtime,
+			playtime_final,
 			names='game_name',
 			values='minutes_per_snapshot',
-			title='Spielzeit pro Spiel (Top 10)',
+			title='Spielzeit pro Spiel',
 			labels={
 				'game_name': 'Spiel',
 				'spielzeit': 'Spielzeit'
@@ -41,10 +53,10 @@ def register_callbacks(app, data_provider: DataProvider):
 			hover_name='game_name'
 		)
 		fig.update_traces(
-			text=playtime['spielzeit'], 
+			text=playtime_final['spielzeit'], 
 			textinfo='label+percent',
 			hovertemplate='<b>%{label}</b><br>Spielzeit: %{customdata}<br>Prozent: %{percent}<extra></extra>',
-			customdata=playtime['spielzeit']
+			customdata=playtime_final['spielzeit']
 		)
 		return fig
 	
