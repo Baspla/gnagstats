@@ -181,7 +181,7 @@ def register_callbacks(app, data_provider: DataProvider):
 		# Datenvalidierung und -bereinigung
 		try:
 			# Stelle sicher, dass alle erforderlichen Spalten vorhanden sind
-			required_columns = ['user_name', 'start_ts', 'end_ts', 'game_name', 'duration_minutes']
+			required_columns = ['user_name', 'start_ts', 'end_ts', 'game_name', 'duration_minutes', 'source']
 			for col in required_columns:
 				if col not in df_game_intervals.columns:
 					return go.Figure(layout=dict(
@@ -193,7 +193,7 @@ def register_callbacks(app, data_provider: DataProvider):
 			
 			# Bereinige die Daten
 			df_clean = df_game_intervals.copy()
-			df_clean = df_clean.dropna(subset=['user_name', 'start_ts', 'end_ts', 'game_name'])
+			df_clean = df_clean.dropna(subset=['user_name', 'start_ts', 'end_ts', 'game_name', 'source'])
 			
 			if df_clean.empty:
 				return go.Figure(layout=dict(
@@ -234,14 +234,16 @@ def register_callbacks(app, data_provider: DataProvider):
 					'start_dt': 'Startzeit',
 					'end_dt': 'Endzeit',
 					'game_name': 'Spiel',
-					'dauer': 'Dauer'
+					'dauer': 'Dauer',
+					'source': 'Quelle'
 				},
 				hover_data={
 					'user_name': True,
 					'game_name': True,
 					'start_dt': True,
 					'end_dt': True,
-					'dauer': True
+					'dauer': True,
+					'source': True
 				}
 			)
 			fig.update_yaxes(title_text='Benutzer', autorange="reversed")
