@@ -1,6 +1,8 @@
 from dash import Input, Output
 import plotly.express as px
 
+from webserver.data_provider import Params
+
 def register_callbacks(app, data_provider):
 	@app.callback(
 		Output('graph-playtime-pie', 'figure'),
@@ -13,7 +15,7 @@ def register_callbacks(app, data_provider):
 		import pandas as pd
 		start_ts = int(pd.Timestamp(start_date).timestamp()) if start_date else None
 		end_ts = int(pd.Timestamp(end_date).timestamp()) if end_date else None
-		params = data_provider.Params(start=start_ts, end=end_ts)
+		params = Params(start=start_ts, end=end_ts)
 		bundle = data_provider.load_all(params)
 		df_combined = bundle[2]
 		if df_combined.empty:
