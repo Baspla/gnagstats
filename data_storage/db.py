@@ -503,6 +503,28 @@ class Database:
         result = cursor.fetchall()
         connection.close()
         return result
+    
+    def web_query_get_first_timestamp(self) -> int | None:
+        """
+        Return the earliest timestamp present in any of the activity tables.
+        :return: Earliest timestamp in epoch seconds, or None if no data exists.
+        """
+        connection = sqlite3.connect(DB_PATH)
+        cursor = connection.cursor()
+        cursor.execute('''
+            SELECT MIN(min_timestamp) FROM (
+                SELECT MIN(timestamp) AS min_timestamp FROM discord_voice_activity
+                UNION ALL
+                SELECT MIN(timestamp) AS min_timestamp FROM discord_voice_channels
+                UNION ALL
+                SELECT MIN(timestamp) AS min_timestamp FROM discord_game_activity
+                UNION ALL
+                SELECT MIN(timestamp) AS min_timestamp FROM steam_game_activity
+            )
+        ''')
+        result = cursor.fetchone()
+        connection.close()
+        return result[0] if result and result[0] is not None else None
 
 def seconds_to_human_readable(total_seconds: int):
     """

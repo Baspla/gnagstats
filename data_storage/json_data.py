@@ -120,24 +120,34 @@ def get_user_data(data: Dict[str, Any]) -> List[Dict[str, str]]:
     logging.debug(f"Extracted user data: {user_data}")
     return user_data
 
-def get_steam_id_to_name_map(data: Dict[str, Any]) -> Dict[str, str]:
-    """Return a mapping from steamId (as string) to human-readable name from the JSON people list."""
+def get_steam_id_to_user_id_map(data: Dict[str, Any]) -> Dict[str, str]:
+    """Return a mapping from steamId (as string) to userId (as string) from the JSON people list."""
     people = data.get("people", [])
     mapping: Dict[str, str] = {}
     for person in people:
-        if "steamId" in person and "name" in person:
-            mapping[str(person["steamId"])] = person["name"]
-    logging.debug(f"Built steam_id->name map with {len(mapping)} entries")
+        if "steamId" in person and "id" in person:
+            mapping[str(person["steamId"])] = person["id"]
+    logging.debug(f"Built steam_id->user_id map with {len(mapping)} entries")
     return mapping
 
-def get_discord_id_to_name_map(data: Dict[str, Any]) -> Dict[str, str]:
-    """Return a mapping from discordId (as string) to human-readable name from the JSON people list."""
+def get_discord_id_to_user_id_map(data: Dict[str, Any]) -> Dict[str, str]:
+    """Return a mapping from discordId (as string) to userId (as string) from the JSON people list."""
     people = data.get("people", [])
     mapping: Dict[str, str] = {}
     for person in people:
-        if "discordId" in person and "name" in person:
-            mapping[str(person["discordId"])] = person["name"]
-    logging.debug(f"Built discord_id->name map with {len(mapping)} entries")
+        if "discordId" in person and "id" in person:
+            mapping[str(person["discordId"])] = person["id"]
+    logging.debug(f"Built discord_id->user_id map with {len(mapping)} entries")
+    return mapping
+
+def get_user_id_to_name_map(data: Dict[str, Any]) -> Dict[str, str]:
+    """Return a mapping from userId (as string) to name (as string) from the JSON people list."""
+    people = data.get("people", [])
+    mapping: Dict[str, str] = {}
+    for person in people:
+        if "id" in person and "name" in person:
+            mapping[str(person["id"])] = person["name"]
+    logging.debug(f"Built user_id->name map with {len(mapping)} entries")
     return mapping
 
 def get_data():
