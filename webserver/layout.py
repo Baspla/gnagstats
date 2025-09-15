@@ -5,16 +5,16 @@ import datetime
 
 from webserver.data_provider import DataProvider
 import pytz
+cet = pytz.timezone("Europe/Berlin")
 
 def get_first_date(data_provider: DataProvider):
     ts = data_provider._query_first_timestamp()
     if ts is None:
         return None
-    return datetime.datetime.utcfromtimestamp(ts).date()
+    return datetime.datetime.fromtimestamp(ts, cet).date()
 
 def create_layout(data_provider: DataProvider = None):
     first_date = get_first_date(data_provider) if data_provider is not None else None
-    cet = pytz.timezone("Europe/Berlin")
     last_date = datetime.datetime.now(cet).date()
     max_date = datetime.datetime.now(cet).isoformat(timespec="seconds")
     return html.Div(

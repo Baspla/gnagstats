@@ -19,7 +19,7 @@ def register_callbacks(app, data_provider: DataProvider):
 		bundle = data_provider.load_all(params)
 		df_combined = bundle[2]
 		if df_combined.empty:
-			return px.pie(names=['Keine Daten'], values=[1], title='Spielzeit pro Nutzer')
-		playtime = df_combined.groupby('user_name')['minutes_per_snapshot'].sum().reset_index()
-		fig = px.pie(playtime, names='user_name', values='minutes_per_snapshot', title='Spielzeit pro Nutzer')
+			return px.pie(names=['Keine Daten'], values=[1], title='Spielzeit pro Spiel')
+		playtime = df_combined.groupby('game_name')['minutes_per_snapshot'].sum().reset_index()
+		fig = px.pie(playtime, names='game_name', values='minutes_per_snapshot', title='Spielzeit pro Spiel')
 		return fig
