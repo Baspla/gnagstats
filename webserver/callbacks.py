@@ -7,6 +7,7 @@ from itertools import combinations
 from collections import Counter
 from urllib.parse import urlparse, parse_qs
 import datetime
+import pytz
 
 from data_storage.db import minutes_to_human_readable
 from webserver.data_provider import DataProvider, Params
@@ -589,26 +590,41 @@ def register_callbacks(app, data_provider: DataProvider):
 	)
 	def update_date_picker_from_url(search):
 		"""Update date picker values from URL parameters"""
+		cet = pytz.timezone("Europe/Berlin")
+		
+		# Get default values (maximum range)
+		first_ts = data_provider._query_first_timestamp()
+		if first_ts is None:
+			default_start = None
+		else:
+			default_start = datetime.datetime.fromtimestamp(first_ts, cet).date()
+		default_end = datetime.datetime.now(cet).date()
+		
+		# If no search parameters, return default values
 		if not search:
-			return None, None
+			return default_start, default_end
 		
 		# Parse URL parameters
 		params = parse_qs(search.lstrip('?'))
 		start_date = params.get('start_date', [None])[0]
 		end_date = params.get('end_date', [None])[0]
 		
-		# Validate date format (YYYY-MM-DD)
+		# Validate date format (YYYY-MM-DD) and use defaults if invalid
 		if start_date:
 			try:
 				datetime.datetime.strptime(start_date, '%Y-%m-%d')
 			except ValueError:
-				start_date = None
+				start_date = default_start
+		else:
+			start_date = default_start
 		
 		if end_date:
 			try:
 				datetime.datetime.strptime(end_date, '%Y-%m-%d')
 			except ValueError:
-				end_date = None
+				end_date = default_end
+		else:
+			end_date = default_end
 		
 		return start_date, end_date
 
