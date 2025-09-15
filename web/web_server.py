@@ -484,11 +484,6 @@ def create_app(database: Database):
             fig_voice_24h_timeline_f,
             recent_players_data,
         ]
-
-    @app.route('/testing')
-    def testing_dashboard():
-        return 'This is the testing dashboard.'
-
     return app
 
 
