@@ -100,6 +100,7 @@ def register_callbacks(app, data_provider: DataProvider):
 		fig.update_layout(legend_title_text='Sprachkanal')
 		return fig
 
+
 	@app.callback(
 		Output('graph-24h-game-activity', 'figure'),
 		[Input('reload-btn', 'n_clicks')]
