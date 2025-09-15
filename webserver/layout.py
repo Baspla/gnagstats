@@ -3,13 +3,15 @@
 from dash import html, dcc
 import datetime
 
-def get_first_date(data_provider):
+from webserver.data_provider import DataProvider
+
+def get_first_date(data_provider: DataProvider):
     ts = data_provider._query_first_timestamp()
     if ts is None:
         return None
     return datetime.datetime.utcfromtimestamp(ts).date()
 
-def create_layout(data_provider=None):
+def create_layout(data_provider: DataProvider = None):
     first_date = get_first_date(data_provider) if data_provider is not None else None
     last_date = datetime.date.today()
     return html.Div(
