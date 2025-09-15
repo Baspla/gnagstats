@@ -27,13 +27,13 @@ def register_callbacks(app, data_provider: DataProvider):
 			return px.pie(names=['Keine Daten'], values=[1], title='Spielzeit pro Spiel')
 
 		playtime = df_combined.groupby('game_name')['minutes_per_snapshot'].sum().reset_index()
-		playtime = playtime.sort_values('minutes_per_snapshot', ascending=False).head(20)
+		playtime = playtime.sort_values('minutes_per_snapshot', ascending=False).head(10)
 		playtime['spielzeit'] = playtime['minutes_per_snapshot'].apply(minutes_to_human_readable)
 		fig = px.pie(
 			playtime,
 			names='game_name',
 			values='minutes_per_snapshot',
-			title='Spielzeit pro Spiel (Top 20)',
+			title='Spielzeit pro Spiel (Top 10)',
 			labels={
 				'game_name': 'Spiel',
 				'spielzeit': 'Spielzeit'
@@ -257,14 +257,11 @@ def register_callbacks(app, data_provider: DataProvider):
 			width = scale_edge_width(weight)
 			x0, y0 = pos[u]
 			x1, y1 = pos[v]
-			hover_text = f"{u} – {v}<br>Gemeinsame Voice-Zeit: {weight:.1f}h"
 			edge_traces.append(go.Scatter(
 				x=[x0, x1], y=[y0, y1],
 				mode="lines",
 				line=dict(width=width, color="rgba(120,120,120,0.5)"),
 				hoverinfo="text",
-				text=hover_text,
-				hovertemplate="%{text}<extra></extra>",
 				showlegend=False
 			))
 		
@@ -389,14 +386,10 @@ def register_callbacks(app, data_provider: DataProvider):
 			x1, y1 = pos[v]
 			u_label = G.nodes[u].get("label", str(u))
 			v_label = G.nodes[v].get("label", str(v))
-			hover_text = f"{u_label} – {v_label}: {weight:.1f}h"
 			edge_traces.append(go.Scatter(
 				x=[x0, x1], y=[y0, y1],
 				mode="lines",
 				line=dict(width=width, color="#aaaaaa"),
-				hoverinfo="text",
-				text=hover_text,
-				hovertemplate="%{text}<extra></extra>",
 				opacity=0.55,
 				showlegend=False
 			))
