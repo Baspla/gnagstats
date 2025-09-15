@@ -125,7 +125,7 @@ class DataProvider:
         result = combined[(combined['source'] == 'steam') | (~combined['key'].isin(steam_keys))]
 
         # Entferne Hilfsspalten
-        result = result.drop(columns=['source', 'key'])
+        result = result.drop(columns=['key'])
 
         # Optional: Sortiere nach Zeit
         result = result.sort_values(by=['user_name', 'timestamp'])
@@ -204,21 +204,23 @@ class DataProvider:
     def _compute_game_activity_intervals(self, df_game: pd.DataFrame) -> pd.DataFrame:
         import math
         if df_game.empty:
-            return pd.DataFrame(columns=["user_name", "game_name", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
+            return pd.DataFrame(columns=["user_name", "game_name", "source", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
         df = df_game.copy()
         if "timestamp" not in df.columns:
-            return pd.DataFrame(columns=["user_name", "game_name", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
+            return pd.DataFrame(columns=["user_name", "game_name", "source", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
         if "user_name" not in df.columns:
             if "user_id" in df.columns:
                 df["user_name"] = df["user_id"]
             else:
-                return pd.DataFrame(columns=["user_name", "game_name", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
+                return pd.DataFrame(columns=["user_name", "game_name", "source", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
         if "game_name" not in df.columns:
             df["game_name"] = "?"
         if "collection_interval" not in df.columns:
             df["collection_interval"] = 300.0
+        if "source" not in df.columns:
+            df["source"] = "unknown"
         sessions = []
-        for (user, game), g in df.groupby(["user_name", "game_name"]):
+        for (user, game, source), g in df.groupby(["user_name", "game_name", "source"]):
             g = g.sort_values("timestamp").reset_index(drop=True)
             current = None
             prev_row = None
@@ -234,7 +236,7 @@ class DataProvider:
                     interv = default_interval
                 snapshot_end = ts + interv
                 if current is None:
-                    current = {"user_name": user, "game_name": game, "start_ts": ts, "end_ts": snapshot_end}
+                    current = {"user_name": user, "game_name": game, "source": source, "start_ts": ts, "end_ts": snapshot_end}
                 else:
                     gap = ts - prev_row["timestamp"] if prev_row is not None else 0
                     prev_interv = prev_row.get("collection_interval") if prev_row is not None else default_interval
@@ -251,12 +253,12 @@ class DataProvider:
                     else:
                         if current["end_ts"] > current["start_ts"]:
                             sessions.append(current)
-                        current = {"user_name": user, "game_name": game, "start_ts": ts, "end_ts": snapshot_end}
+                        current = {"user_name": user, "game_name": game, "source": source, "start_ts": ts, "end_ts": snapshot_end}
                 prev_row = row
             if current is not None and current["end_ts"] > current["start_ts"]:
                 sessions.append(current)
         if not sessions:
-            return pd.DataFrame(columns=["user_name", "game_name", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
+            return pd.DataFrame(columns=["user_name", "game_name", "source", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
         sess_df = pd.DataFrame(sessions)
         sess_df["start_dt"] = pd.to_datetime(sess_df["start_ts"], unit="s")
         sess_df["end_dt"] = pd.to_datetime(sess_df["end_ts"], unit="s")

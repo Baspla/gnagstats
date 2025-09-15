@@ -132,7 +132,7 @@ def register_callbacks(app, data_provider: DataProvider):
 		df_game_intervals = bundle["game_intervals"]
 		if df_game_intervals.empty:
 			return px.timeline(
-				pd.DataFrame(columns=['user_name', 'start_dt', 'end_dt', 'game_name', 'duration_minutes']),
+				pd.DataFrame(columns=['user_name', 'start_dt', 'end_dt', 'game_name', 'duration_minutes','source']),
 				x_start='start_dt',
 				x_end='end_dt',
 				y='user_name',
@@ -143,14 +143,16 @@ def register_callbacks(app, data_provider: DataProvider):
 					'start_dt': 'Startzeit',
 					'end_dt': 'Endzeit',
 					'game_name': 'Spiel',
-					'duration_minutes': 'Dauer'
+					'duration_minutes': 'Dauer',
+					'source': 'Quelle'
 				},
 				hover_data={
 					'user_name': True,
 					'game_name': True,
 					'start_dt': True,
 					'end_dt': True,
-					'duration_minutes': True
+					'duration_minutes': True,
+					'source': True
 				}
 			)
 		df_game_intervals['start_dt'] = pd.to_datetime(df_game_intervals['start_ts'], unit='s')
