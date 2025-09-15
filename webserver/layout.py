@@ -4,6 +4,7 @@ from dash import html, dcc
 import datetime
 
 from webserver.data_provider import DataProvider
+import pytz
 
 def get_first_date(data_provider: DataProvider):
     ts = data_provider._query_first_timestamp()
@@ -13,7 +14,9 @@ def get_first_date(data_provider: DataProvider):
 
 def create_layout(data_provider: DataProvider = None):
     first_date = get_first_date(data_provider) if data_provider is not None else None
-    last_date = datetime.date.today()
+    cet = pytz.timezone("Europe/Berlin")
+    last_date = datetime.datetime.now(cet).date()
+    max_date = datetime.datetime.now(cet).isoformat(timespec="seconds")
     return html.Div(
         [
             html.H2("Gnag Stats"),
@@ -26,8 +29,8 @@ def create_layout(data_provider: DataProvider = None):
                         start_date_placeholder_text="Startdatum",
                         end_date_placeholder_text="Enddatum",
                         min_date_allowed=first_date,
-                        max_date_allowed=last_date,
-                        end_date=last_date,
+                        max_date_allowed=max_date,
+                        end_date=max_date,
                         start_date=first_date,
                     ),
                 ],
