@@ -527,3 +527,52 @@ def register_callbacks(app, data_provider: DataProvider):
 		fig.update_xaxes(tickangle=-45)
 		fig.update_layout(margin=dict(l=40, r=40, t=60, b=100))
 		return fig
+	
+	"""
+	Recent Activity List
+	Show the game activity in the last 10 minutes from right now
+	Shows User and Game and only those two columns
+	"""
+	@app.callback(
+		Output('recent-activity-list', 'figure'),
+		[Input('reload-btn', 'n_clicks'),
+		 Input('timerange-picker', 'start_date'),
+		 Input('timerange-picker', 'end_date')]
+	)
+	def update_recent_activity_list(n_clicks, start_date, end_date):
+		start_ts = int(pd.Timestamp(start_date).timestamp()) if start_date else None
+		end_ts = int((pd.Timestamp(end_date) + pd.Timedelta(days=1)).timestamp()) if end_date else None
+		params = Params(start=start_ts, end=end_ts)
+		bundle = data_provider.load_all(params)
+		df_games = bundle["games"]
+		if df_games.empty:
+			return go.Figure(layout=dict(
+				xaxis=dict(visible=False), 
+				yaxis=dict(visible=False), 
+				title="Letzte Spielaktivitäten (keine Daten)",
+				margin=dict(l=0, r=0, t=30, b=0)
+			))
+		# Filtere auf die letzten 10 Minuten
+		cutoff_ts = int(pd.Timestamp.now().timestamp()) - 10 * 60
+		recent_activities = df_games[df_games['timestamp'] >= cutoff_ts]
+		if recent_activities.empty:
+			return go.Figure(layout=dict(
+				xaxis=dict(visible=False), 
+				yaxis=dict(visible=False), 
+				title="Letzte Spielaktivitäten (keine Aktivitäten in den letzten 10 Minuten)",
+				margin=dict(l=0, r=0, t=30, b=0)
+			))´
+		recent_activities = recent_activities.sort_values('timestamp', ascending=False)
+		recent_activities = recent_activities[['user_name', 'game_name']].drop_duplicates().head(10)
+		recent_activities['user_name'] = recent_activities['user_name'].fillna('Unbekannt')
+		recent_activities['game_name'] = recent_activities['game_name'].fillna('Kein Spiel')
+		fig = go.Figure(data=[go.Table(
+			header=dict(values=['Benutzer', 'Spiel'],
+						fill_color='paleturquoise',
+						align='left'),
+			cells=dict(values=[recent_activities['user_name'], recent_activities['game_name']],
+					   fill_color='lavender',
+					   align='left'))
+		])
+		fig.update_layout(title='Letzte Spielaktivitäten (letzte 10 Minuten)', title_x=0.5)
+		return fig
