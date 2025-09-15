@@ -33,7 +33,7 @@ def register_callbacks(app, data_provider: DataProvider):
 		other_games = playtime.iloc[top_n:]
 		if not other_games.empty:
 			others_row = pd.DataFrame({
-				'game_name': ['Others'],
+				'game_name': ['Andere Spiele'],
 				'minutes_per_snapshot': [other_games['minutes_per_snapshot'].sum()]
 			})
 			playtime_final = pd.concat([top_games, others_row], ignore_index=True)
