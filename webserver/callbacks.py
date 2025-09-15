@@ -98,3 +98,64 @@ def register_callbacks(app, data_provider: DataProvider):
 		fig.update_xaxes(title_text='Zeit')
 		fig.update_layout(legend_title_text='Sprachkanal')
 		return fig
+
+
+	@app.callback(
+		Output('graph-24h-game-activity', 'figure'),
+		[Input('reload-btn', 'n_clicks')]
+	)
+	def update_game_activity(n_clicks):
+		params = Params(start=int(pd.Timestamp.now().timestamp()) - 24 * 60 * 60, end=int(pd.Timestamp.now().timestamp()))
+		bundle = data_provider.load_all(params)
+		df_game_intervals = bundle["game_intervals"]
+		if df_game_intervals.empty:
+			return px.timeline(
+				pd.DataFrame(columns=['user_name', 'start_dt', 'end_dt', 'game_name', 'duration_minutes']),
+				x_start='start_dt',
+				x_end='end_dt',
+				y='user_name',
+				color='game_name',
+				title='Spielaktivität der letzten 24 Stunden',
+				labels={
+					'user_name': 'Benutzer',
+					'start_dt': 'Startzeit',
+					'end_dt': 'Endzeit',
+					'game_name': 'Spiel',
+					'duration_minutes': 'Dauer'
+				},
+				hover_data={
+					'user_name': True,
+					'game_name': True,
+					'start_dt': True,
+					'end_dt': True,
+					'duration_minutes': True
+				}
+			)
+		df_game_intervals['start_dt'] = pd.to_datetime(df_game_intervals['start_ts'], unit='s')
+		df_game_intervals['end_dt'] = pd.to_datetime(df_game_intervals['end_ts'], unit='s')
+		fig = px.timeline(
+			df_game_intervals,
+			x_start='start_dt',
+			x_end='end_dt',
+			y='user_name',
+			color='game_name',
+			title='Spielaktivität der letzten 24 Stunden',
+			labels={
+				'user_name': 'Benutzer',
+				'start_dt': 'Startzeit',
+				'end_dt': 'Endzeit',
+				'game_name': 'Spiel',
+				'duration_minutes': 'Dauer'
+			},
+			hover_data={
+				'user_name': True,
+				'game_name': True,
+				'start_dt': True,
+				'end_dt': True,
+				'duration_minutes': True
+			}
+		)
+		fig.update_yaxes(title_text='Benutzer', autorange="reversed")
+		fig.update_xaxes(title_text='Zeit')
+		fig.update_layout(legend_title_text='Spiel')
+		return fig
