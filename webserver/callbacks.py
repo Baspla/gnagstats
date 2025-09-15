@@ -38,7 +38,7 @@ def register_callbacks(app, data_provider: DataProvider):
 				'game_name': 'Spiel',
 				'spielzeit': 'Spielzeit'
 			},
-			hover_data={'game_name': True, 'spielzeit': True}
+			hover_data={'game_name': True, 'spielzeit': True, 'minutes_per_snapshot': False}
 		)
 		fig.update_traces(text=playtime['spielzeit'], textinfo='label+percent')
 		return fig

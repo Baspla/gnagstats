@@ -21,7 +21,6 @@ def create_layout(data_provider: DataProvider = None):
             html.H2("Gnag Stats"),
             html.Div(
                 [
-                    html.Button("Reload", id="reload-btn", n_clicks=0),
                     dcc.DatePickerRange(
                         id="timerange-picker",
                         display_format="YYYY-MM-DD",
@@ -31,7 +30,9 @@ def create_layout(data_provider: DataProvider = None):
                         max_date_allowed=last_date,
                         end_date=last_date,
                         start_date=first_date,
+                        first_day_of_week=1,
                     ),
+                    html.Button("Aktualisieren", id="reload-btn", n_clicks=0),
                 ],
                 id="controls",
             ),
