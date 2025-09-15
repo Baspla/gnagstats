@@ -15,7 +15,7 @@ def register_callbacks(app, data_provider: DataProvider):
 		# Konvertiere die Datumswerte in UNIX-Timestamps (Sekunden)
 		import pandas as pd
 		start_ts = int(pd.Timestamp(start_date).timestamp()) if start_date else None
-		end_ts = int(pd.Timestamp(end_date).timestamp()+pd.Timedelta(days=1)) if end_date else None
+		end_ts = int((pd.Timestamp(end_date) + pd.Timedelta(days=1)).timestamp()) if end_date else None
 		params = Params(start=start_ts, end=end_ts)
 		bundle = data_provider.load_all(params)
 		df_combined = bundle["combined"]
@@ -30,14 +30,53 @@ def register_callbacks(app, data_provider: DataProvider):
 		[Input('reload-btn', 'n_clicks')]
 	)
 	def update_voice_activity(n_clicks):
-		# Gantt-Diagramm der Sprachaktivität über 24 Stunden mit df_voice_intervals
 		params = Params(start=int(pd.Timestamp.now().timestamp()) - 24 * 60 * 60, end=int(pd.Timestamp.now().timestamp()))
 		bundle = data_provider.load_all(params)
 		df_voice_intervals = bundle["voice_intervals"]
 		if df_voice_intervals.empty:
-			return px.timeline(pd.DataFrame(columns=['user_name', 'start_dt', 'end_dt', 'channel_name']), x_start='start_dt', x_end='end_dt', y='user_name', color='channel_name', title='Sprachaktivität der letzten 24 Stunden')
+			return px.timeline(
+				pd.DataFrame(columns=['user_name', 'start_dt', 'end_dt', 'channel_name']),
+				x_start='start_dt',
+				x_end='end_dt',
+				y='user_name',
+				color='channel_name',
+				title='Sprachaktivität der letzten 24 Stunden',
+				labels={
+					'user_name': 'Benutzer',
+					'start_dt': 'Startzeit',
+					'end_dt': 'Endzeit',
+					'channel_name': 'Sprachkanal'
+				},
+				hover_data={
+					'user_name': True,
+					'channel_name': True,
+					'start_dt': True,
+					'end_dt': True
+				}
+			)
 		df_voice_intervals['start_dt'] = pd.to_datetime(df_voice_intervals['start_ts'], unit='s')
 		df_voice_intervals['end_dt'] = pd.to_datetime(df_voice_intervals['end_ts'], unit='s')
-		fig = px.timeline(df_voice_intervals, x_start='start_dt', x_end='end_dt', y='user_name', color='channel_name', title='Sprachaktivität der letzten 24 Stunden')
-		fig.update_yaxes(autorange="reversed") # Damit die neuesten Einträge oben sind
+		fig = px.timeline(
+			df_voice_intervals,
+			x_start='start_dt',
+			x_end='end_dt',
+			y='user_name',
+			color='channel_name',
+			title='Sprachaktivität der letzten 24 Stunden',
+			labels={
+				'user_name': 'Benutzer',
+				'start_dt': 'Startzeit',
+				'end_dt': 'Endzeit',
+				'channel_name': 'Sprachkanal'
+			},
+			hover_data={
+				'user_name': True,
+				'channel_name': True,
+				'start_dt': True,
+				'end_dt': True
+			}
+		)
+		fig.update_yaxes(title_text='Benutzer', autorange="reversed")
+		fig.update_xaxes(title_text='Zeit')
+		fig.update_layout(legend_title_text='Sprachkanal')
 		return fig
