@@ -43,12 +43,8 @@ def create_layout(data_provider: DataProvider = None):
                     dcc.Graph(id="graph-24h-game-activity"),
                     dcc.Graph(id="network-voice-activity"),
                     dcc.Graph(id="network-game-activity"),
-                    html.Div(
-                        dcc.Graph(id="heatmap-user-game-activity"),
-                        dcc.Graph(id="recent-activity-list"),
-                        id="heatmap-recent-horizontal-split",
-                        style={"display": "flex", "flexDirection": "row", "gap": "20px"},
-                    )
+                    dcc.Graph(id="heatmap-user-game-activity"),
+                    dcc.Graph(id="recent-activity-list"),
                 ],
                 id="plots",
             ),
