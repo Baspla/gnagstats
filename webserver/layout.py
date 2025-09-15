@@ -39,6 +39,7 @@ def create_layout(data_provider: DataProvider = None):
                 [
                     dcc.Graph(id="graph-playtime-pie"),
                     dcc.Graph(id="graph-24h-voice-activity"),
+                    dcc.Graph(id="graph-24h-game-activity"),
                 ],
                 id="plots",
             ),
