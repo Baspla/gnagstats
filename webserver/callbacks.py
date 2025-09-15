@@ -476,7 +476,9 @@ def register_callbacks(app, data_provider: DataProvider):
 			))
 		
 		# Berechne Spielzeit pro User-Game-Paar
-		user_game_hours = df_games.groupby(["user_name", "game_name"])["minutes_per_snapshot"].sum().reset_index()
+		game_totals = df_games.groupby("game_name")["minutes_per_snapshot"].sum().sort_values(ascending=False)
+		top_games = game_totals.head(20).index.tolist()
+		user_game_hours = df_games[df_games["game_name"].isin(top_games)].groupby(["user_name", "game_name"])["minutes_per_snapshot"].sum().reset_index()
 		user_game_hours["hours"] = user_game_hours["minutes_per_snapshot"] / 60.0
 		
 		if user_game_hours.empty:
