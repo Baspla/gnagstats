@@ -72,6 +72,7 @@ def register_callbacks(app, data_provider: DataProvider):
 			)
 		df_voice_intervals['start_dt'] = pd.to_datetime(df_voice_intervals['start_ts'], unit='s')
 		df_voice_intervals['end_dt'] = pd.to_datetime(df_voice_intervals['end_ts'], unit='s')
+		df_voice_intervals['dauer'] = df_voice_intervals['duration_minutes'].apply(minutes_to_human_readable)
 		fig = px.timeline(
 			df_voice_intervals,
 			x_start='start_dt',
@@ -84,21 +85,20 @@ def register_callbacks(app, data_provider: DataProvider):
 				'start_dt': 'Startzeit',
 				'end_dt': 'Endzeit',
 				'channel_name': 'Sprachkanal',
-				'duration_minutes': 'Dauer'
+				'dauer': 'Dauer'
 			},
 			hover_data={
 				'user_name': True,
 				'channel_name': True,
 				'start_dt': True,
 				'end_dt': True,
-				'duration_minutes': True
+				'dauer': True
 			}
 		)
 		fig.update_yaxes(title_text='Benutzer', autorange="reversed")
 		fig.update_xaxes(title_text='Zeit')
 		fig.update_layout(legend_title_text='Sprachkanal')
 		return fig
-
 
 	@app.callback(
 		Output('graph-24h-game-activity', 'figure'),
@@ -133,6 +133,7 @@ def register_callbacks(app, data_provider: DataProvider):
 			)
 		df_game_intervals['start_dt'] = pd.to_datetime(df_game_intervals['start_ts'], unit='s')
 		df_game_intervals['end_dt'] = pd.to_datetime(df_game_intervals['end_ts'], unit='s')
+		df_game_intervals['dauer'] = df_game_intervals['duration_minutes'].apply(minutes_to_human_readable)
 		fig = px.timeline(
 			df_game_intervals,
 			x_start='start_dt',
@@ -145,14 +146,14 @@ def register_callbacks(app, data_provider: DataProvider):
 				'start_dt': 'Startzeit',
 				'end_dt': 'Endzeit',
 				'game_name': 'Spiel',
-				'duration_minutes': 'Dauer'
+				'dauer': 'Dauer'
 			},
 			hover_data={
 				'user_name': True,
 				'game_name': True,
 				'start_dt': True,
 				'end_dt': True,
-				'duration_minutes': True
+				'dauer': True
 			}
 		)
 		fig.update_yaxes(title_text='Benutzer', autorange="reversed")
