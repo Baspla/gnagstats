@@ -32,7 +32,8 @@ class DataProvider:
         rows = self.db.web_query_get_steam_game_activity(start, end)
         df = (
             pd.DataFrame(rows, columns=["timestamp", "steam_id", "game_name", "collection_interval"]) if rows
-            else pd.DataFrame(columns=["timestamp", "steam_id", "game_name", "collection_interval"])
+            else pd.DataFrame(columns=["timestamp", "steam_id", "game_name", "collection_interval", 
+                                       "timestamp_dt","minutes_per_snapshot","user_id", "user_name"])
         )
         if not df.empty:
             df["timestamp_dt"] = pd.to_datetime(df["timestamp"], unit="s")
@@ -47,7 +48,8 @@ class DataProvider:
         rows = self.db.web_query_get_discord_game_activity(start, end)
         df = (
             pd.DataFrame(rows, columns=["timestamp", "discord_id", "game_name", "collection_interval"]) if rows
-            else pd.DataFrame(columns=["timestamp", "discord_id", "game_name", "collection_interval"])
+            else pd.DataFrame(columns=["timestamp", "discord_id", "game_name", "collection_interval",
+                                       "timestamp_dt","minutes_per_snapshot","user_id", "user_name"])
         )
         if not df.empty:
             df["timestamp_dt"] = pd.to_datetime(df["timestamp"], unit="s")
@@ -62,7 +64,8 @@ class DataProvider:
         rows = self.db.web_query_get_discord_voice_activity(start, end)
         df = (
             pd.DataFrame(rows, columns=["timestamp", "discord_id", "channel_name", "guild_id", "collection_interval"]) if rows
-            else pd.DataFrame(columns=["timestamp", "discord_id", "channel_name", "guild_id", "collection_interval"])
+            else pd.DataFrame(columns=["timestamp", "discord_id", "channel_name", "guild_id", "collection_interval", 
+                                       "minutes_per_snapshot","timestamp_dt","user_id","user_name"])
         )
         if not df.empty:
             df["timestamp_dt"] = pd.to_datetime(df["timestamp"], unit="s")
@@ -77,7 +80,8 @@ class DataProvider:
         rows = self.db.web_query_get_discord_voice_channels(start, end)
         df = (
             pd.DataFrame(rows, columns=["timestamp", "channel_name", "guild_id", "user_count", "tracked_users", "collection_interval"]) if rows
-            else pd.DataFrame(columns=["timestamp", "channel_name", "guild_id", "user_count", "tracked_users", "collection_interval"])
+            else pd.DataFrame(columns=["timestamp", "channel_name", "guild_id", "user_count", "tracked_users", "collection_interval",
+                                        "minutes_per_snapshot","timestamp_dt"])
         )
         if not df.empty:
             df["timestamp_dt"] = pd.to_datetime(df["timestamp"], unit="s")
@@ -96,6 +100,11 @@ class DataProvider:
         discord['source'] = 'discord'
 
         # Vereinheitliche die relevanten Spalten
+        for col in ['user_name', 'minutes_per_snapshot']:
+            if col not in steam.columns:
+                steam[col] = None
+            if col not in discord.columns:
+                discord[col] = None
         steam = steam[['timestamp', 'user_name', 'game_name', 'minutes_per_snapshot', 'source']]
         discord = discord[['timestamp', 'user_name', 'game_name', 'minutes_per_snapshot', 'source']]
 

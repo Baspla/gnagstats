@@ -1,9 +1,9 @@
 from dash import Input, Output
 import plotly.express as px
 
-from webserver.data_provider import Params
+from webserver.data_provider import DataProvider, Params
 
-def register_callbacks(app, data_provider):
+def register_callbacks(app, data_provider: DataProvider):
 	@app.callback(
 		Output('graph-playtime-pie', 'figure'),
 		[Input('reload-btn', 'n_clicks'),
