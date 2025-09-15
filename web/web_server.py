@@ -485,6 +485,10 @@ def create_app(database: Database):
             recent_players_data,
         ]
 
+    @app.route('/testing')
+    def testing_dashboard():
+        return 'This is the testing dashboard.'
+
     return app
 
 
