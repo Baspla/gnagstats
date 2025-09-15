@@ -71,38 +71,38 @@ def register_callbacks(app, data_provider: DataProvider):
 		params = Params(start=int(pd.Timestamp.now().timestamp()) - 24 * 60 * 60, end=int(pd.Timestamp.now().timestamp()))
 		bundle = data_provider.load_all(params)
 		df_voice_intervals = bundle["voice_intervals"]
-		
+
 		# Erstelle ein leeres Figure wenn keine Daten vorhanden sind
 		if df_voice_intervals.empty:
 			return go.Figure(layout=dict(
 				xaxis=dict(visible=False), 
 				yaxis=dict(visible=False), 
-				title="Sprachaktivität der letzten 24 Stunden (keine Daten)",
+				title="Voice-Aktivität der letzten 24 Stunden (keine Daten)",
 				margin=dict(l=0, r=0, t=30, b=0)
 			))
 		
 		# Datenvalidierung und -bereinigung
 		try:
 			# Stelle sicher, dass alle erforderlichen Spalten vorhanden sind
-			required_columns = ['user_name', 'start_ts', 'end_ts', 'channel_name', 'duration_minutes']
+			required_columns = ['user_name', 'start_ts', 'end_ts', 'duration_minutes']
 			for col in required_columns:
 				if col not in df_voice_intervals.columns:
 					return go.Figure(layout=dict(
 						xaxis=dict(visible=False), 
 						yaxis=dict(visible=False), 
-						title=f"Sprachaktivität der letzten 24 Stunden (Fehler: Spalte '{col}' fehlt)",
+						title=f"Voice-Aktivität der letzten 24 Stunden (Fehler: Spalte '{col}' fehlt)",
 						margin=dict(l=0, r=0, t=30, b=0)
 					))
 			
 			# Bereinige die Daten
 			df_clean = df_voice_intervals.copy()
-			df_clean = df_clean.dropna(subset=['user_name', 'start_ts', 'end_ts', 'channel_name'])
+			df_clean = df_clean.dropna(subset=['user_name', 'start_ts', 'end_ts'])
 			
 			if df_clean.empty:
 				return go.Figure(layout=dict(
 					xaxis=dict(visible=False), 
 					yaxis=dict(visible=False), 
-					title="Sprachaktivität der letzten 24 Stunden (keine gültigen Daten)",
+					title="Voice-Aktivität der letzten 24 Stunden (keine gültigen Daten)",
 					margin=dict(l=0, r=0, t=30, b=0)
 				))
 			
@@ -117,7 +117,7 @@ def register_callbacks(app, data_provider: DataProvider):
 				return go.Figure(layout=dict(
 					xaxis=dict(visible=False), 
 					yaxis=dict(visible=False), 
-					title="Sprachaktivität der letzten 24 Stunden (ungültige Zeitstempel)",
+					title="Voice-Aktivität der letzten 24 Stunden (ungültige Zeitstempel)",
 					margin=dict(l=0, r=0, t=30, b=0)
 				))
 			
@@ -130,13 +130,13 @@ def register_callbacks(app, data_provider: DataProvider):
 				x_start='start_dt',
 				x_end='end_dt',
 				y='user_name',
-				color='channel_name',
-				title='Sprachaktivität der letzten 24 Stunden',
+				color='game_name',
+				title='Voice-Aktivität der letzten 24 Stunden',
 				labels={
 					'user_name': 'Benutzer',
 					'start_dt': 'Startzeit',
 					'end_dt': 'Endzeit',
-					'channel_name': 'Sprachkanal',
+					'channel_name': 'Kanal',
 					'dauer': 'Dauer'
 				},
 				hover_data={
@@ -149,18 +149,16 @@ def register_callbacks(app, data_provider: DataProvider):
 			)
 			fig.update_yaxes(title_text='Benutzer', autorange="reversed")
 			fig.update_xaxes(title_text='Zeit')
-			fig.update_layout(legend_title_text='Sprachkanal')
+			fig.update_layout(legend_title_text='Spiel')
 			return fig
-			
 		except Exception as e:
 			# Fallback bei jedem anderen Fehler
 			return go.Figure(layout=dict(
 				xaxis=dict(visible=False), 
 				yaxis=dict(visible=False), 
-				title=f"Sprachaktivität der letzten 24 Stunden (Fehler: {str(e)})",
+				title=f"Voice-Aktivität der letzten 24 Stunden (Fehler: {str(e)})",
 				margin=dict(l=0, r=0, t=30, b=0)
 			))
-
 
 	@app.callback(
 		Output('graph-24h-game-activity', 'figure'),
