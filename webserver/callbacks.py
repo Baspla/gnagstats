@@ -5,6 +5,8 @@ import pandas as pd
 import networkx as nx
 from itertools import combinations
 from collections import Counter
+from urllib.parse import urlparse, parse_qs
+import datetime
 
 from data_storage.db import minutes_to_human_readable
 from webserver.data_provider import DataProvider, Params
@@ -578,3 +580,54 @@ def register_callbacks(app, data_provider: DataProvider):
 		])
 		fig.update_layout(title='Letzte Spielaktivitäten (letzte 10 Minuten)', title_x=0.5)
 		return fig
+
+	# URL Parameter Callbacks
+	@app.callback(
+		[Output('timerange-picker', 'start_date'),
+		 Output('timerange-picker', 'end_date')],
+		[Input('url', 'search')]
+	)
+	def update_date_picker_from_url(search):
+		"""Update date picker values from URL parameters"""
+		if not search:
+			return None, None
+		
+		# Parse URL parameters
+		params = parse_qs(search.lstrip('?'))
+		start_date = params.get('start_date', [None])[0]
+		end_date = params.get('end_date', [None])[0]
+		
+		# Validate date format (YYYY-MM-DD)
+		if start_date:
+			try:
+				datetime.datetime.strptime(start_date, '%Y-%m-%d')
+			except ValueError:
+				start_date = None
+		
+		if end_date:
+			try:
+				datetime.datetime.strptime(end_date, '%Y-%m-%d')
+			except ValueError:
+				end_date = None
+		
+		return start_date, end_date
+
+	@app.callback(
+		Output('url', 'search'),
+		[Input('timerange-picker', 'start_date'),
+		 Input('timerange-picker', 'end_date')],
+		prevent_initial_call=True
+	)
+	def update_url_from_date_picker(start_date, end_date):
+		"""Update URL parameters when date picker values change"""
+		params = []
+		
+		if start_date:
+			params.append(f"start_date={start_date}")
+		if end_date:
+			params.append(f"end_date={end_date}")
+		
+		if params:
+			return "?" + "&".join(params)
+		else:
+			return ""

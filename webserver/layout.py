@@ -18,6 +18,7 @@ def create_layout(data_provider: DataProvider = None):
     last_date = datetime.datetime.now(cet).date()
     return html.Div(
         [
+            dcc.Location(id='url', refresh=False),
             html.H2("Gnag Stats"),
             html.Div(
                 [
