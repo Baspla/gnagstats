@@ -130,13 +130,13 @@ def register_callbacks(app, data_provider: DataProvider):
 				x_start='start_dt',
 				x_end='end_dt',
 				y='user_name',
-				color='game_name',
+				color='channel_name',
 				title='Voice-Aktivität der letzten 24 Stunden',
 				labels={
 					'user_name': 'Benutzer',
 					'start_dt': 'Startzeit',
 					'end_dt': 'Endzeit',
-					'channel_name': 'Kanal',
+					'channel_name': 'Channel',
 					'dauer': 'Dauer'
 				},
 				hover_data={
@@ -149,7 +149,7 @@ def register_callbacks(app, data_provider: DataProvider):
 			)
 			fig.update_yaxes(title_text='Benutzer', autorange="reversed")
 			fig.update_xaxes(title_text='Zeit')
-			fig.update_layout(legend_title_text='Spiel')
+			fig.update_layout(legend_title_text='Channel')
 			return fig
 		except Exception as e:
 			# Fallback bei jedem anderen Fehler
