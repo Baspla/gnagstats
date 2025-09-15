@@ -17,7 +17,7 @@ from data_storage.db import Database
 from discord_bot import DiscordClient
 from data_storage.json_data import  get_data
 from newsletter.newsletter_creator import NewsletterCreator
-from webserver.server import run_webserver
+from webserver.wsgi import run_webserver
 
 data = {
     "guild_ids": [],
