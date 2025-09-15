@@ -426,9 +426,8 @@ def register_callbacks(app, data_provider: DataProvider):
 		user_game_hours = df_games.groupby(["user_name", "game_name"])["minutes_per_snapshot"].sum().reset_index()
 		user_game_hours["hours"] = user_game_hours["minutes_per_snapshot"] / 60.0
 		
-		# Filtere Spiele mit mindestens 20 Stunden Gesamtspielzeit
 		game_totals = user_game_hours.groupby("game_name")["hours"].sum()
-		keep_games = set(game_totals[game_totals >= 20.0].index)
+		keep_games = set(game_totals[game_totals >= 10.0].index)
 		
 		if not keep_games:
 			return go.Figure(layout=dict(
