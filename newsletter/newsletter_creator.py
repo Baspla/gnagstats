@@ -2,7 +2,7 @@ import logging
 from datetime import datetime as dt
 import datetime
 
-from db import Database, timesteps_to_human_readable, seconds_to_human_readable
+from data_storage.db import Database, timesteps_to_human_readable, seconds_to_human_readable
 from jinja2 import Environment, FileSystemLoader
 from config import DISCORD_WEBHOOK_URL
 import requests

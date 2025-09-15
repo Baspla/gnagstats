@@ -3,7 +3,7 @@ from datetime import datetime
 
 from discord import ActivityType
 
-from db import Database
+from data_storage.db import Database
 from discord_bot import DiscordClient
 from steam_web_api import Steam
 

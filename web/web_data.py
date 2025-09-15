@@ -11,8 +11,8 @@ from typing import Optional
 import logging
 import pandas as pd
 
-from db import Database
-from json_data import (
+from data_storage.db import Database
+from data_storage.json_data import (
     load_json_data,
     get_steam_id_to_name_map,
     get_discord_id_to_name_map,

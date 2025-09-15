@@ -9,14 +9,15 @@ import discord
 from discord.webhook.async_ import async_context
 from steam_web_api import Steam
 
-from collector import DataCollector
+from collection.collector import DataCollector
 from config import LOGGING_LEVEL, DISCORD_API_TOKEN, DISCORD_STATS_ENABLED, STEAM_API_KEY, DATA_COLLECTION_INTERVAL, \
     DEBUG_MODE, PORT, HOST
-from current_events import CurrentEventFetcher
-from db import Database
+from collection.current_events import CurrentEventFetcher
+from data_storage.db import Database
 from discord_bot import DiscordClient
-from json_data import  get_data
-from newsletter_creator import NewsletterCreator
+from data_storage.json_data import  get_data
+from newsletter.newsletter_creator import NewsletterCreator
+from web.web_server import run_webserver
 
 data = {
     "guild_ids": [],
@@ -130,7 +131,6 @@ async def main():
     setup_logging()
     database = Database()
     # Starte Webserver für Statistiken
-    from web_server import run_webserver
     run_webserver(database, host=HOST, port=PORT)
 
     data = get_data()

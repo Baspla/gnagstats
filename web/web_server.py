@@ -15,7 +15,7 @@ from typing import Optional
 import pandas as pd
 from waitress import serve
 
-from db import Database
+from data_storage.db import Database
 from web_data import WebDataLoader
 from web_aggregations import (
     agg_playtime_per_game,
