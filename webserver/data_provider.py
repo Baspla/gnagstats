@@ -283,7 +283,7 @@ class DataProvider:
         return {
             "steam": df_steam,
             "discord": df_discord,
-            "combined": df_combined,
+            "games": df_combined,
             "voice": df_voice,
             "channels": df_channels,
             "voice_intervals": df_voice_intervals,

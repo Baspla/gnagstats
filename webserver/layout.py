@@ -43,6 +43,7 @@ def create_layout(data_provider: DataProvider = None):
                     dcc.Graph(id="graph-24h-game-activity"),
                     dcc.Graph(id="network-voice-activity"),
                     dcc.Graph(id="network-game-activity"),
+                    dcc.Graph(id="heatmap-user-game-activity"),
                 ],
                 id="plots",
             ),

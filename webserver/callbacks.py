@@ -22,11 +22,11 @@ def register_callbacks(app, data_provider: DataProvider):
 		end_ts = int((pd.Timestamp(end_date) + pd.Timedelta(days=1)).timestamp()) if end_date else None
 		params = Params(start=start_ts, end=end_ts)
 		bundle = data_provider.load_all(params)
-		df_combined = bundle["combined"]
-		if df_combined.empty:
+		df_games = bundle["games"]
+		if df_games.empty:
 			return px.pie(names=['Keine Daten'], values=[1], title='Spielzeit pro Spiel')
 
-		playtime = df_combined.groupby('game_name')['minutes_per_snapshot'].sum().reset_index()
+		playtime = df_games.groupby('game_name')['minutes_per_snapshot'].sum().reset_index()
 		playtime = playtime.sort_values('minutes_per_snapshot', ascending=False).head(10)
 		playtime['spielzeit'] = playtime['minutes_per_snapshot'].apply(minutes_to_human_readable)
 		fig = px.pie(
@@ -318,9 +318,9 @@ def register_callbacks(app, data_provider: DataProvider):
 		end_ts = int((pd.Timestamp(end_date) + pd.Timedelta(days=1)).timestamp()) if end_date else None
 		params = Params(start=start_ts, end=end_ts)
 		bundle = data_provider.load_all(params)
-		df_combined = bundle["combined"]
+		df_games = bundle["games"]
 		
-		if df_combined.empty:
+		if df_games.empty:
 			return go.Figure(layout=dict(
 				xaxis=dict(visible=False), 
 				yaxis=dict(visible=False), 
@@ -329,7 +329,7 @@ def register_callbacks(app, data_provider: DataProvider):
 			))
 		
 		# Berechne Spielzeit pro User-Game-Paar
-		user_game_hours = df_combined.groupby(["user_name", "game_name"])["minutes_per_snapshot"].sum().reset_index()
+		user_game_hours = df_games.groupby(["user_name", "game_name"])["minutes_per_snapshot"].sum().reset_index()
 		user_game_hours["hours"] = user_game_hours["minutes_per_snapshot"] / 60.0
 		
 		# Filtere Spiele mit mindestens 20 Stunden Gesamtspielzeit
@@ -454,3 +454,58 @@ def register_callbacks(app, data_provider: DataProvider):
 		
 		return fig
 	
+	@app.callback(
+		Output('heatmap-user-game-activity', 'figure'),
+		[Input('reload-btn', 'n_clicks'),
+		 Input('timerange-picker', 'start_date'),
+		 Input('timerange-picker', 'end_date')]
+	)
+	def update_user_game_heatmap(n_clicks, start_date, end_date):
+		start_ts = int(pd.Timestamp(start_date).timestamp()) if start_date else None
+		end_ts = int((pd.Timestamp(end_date) + pd.Timedelta(days=1)).timestamp()) if end_date else None
+		params = Params(start=start_ts, end=end_ts)
+		bundle = data_provider.load_all(params)
+		df_games = bundle["games"]
+		
+		if df_games.empty:
+			return go.Figure(layout=dict(
+				xaxis=dict(visible=False), 
+				yaxis=dict(visible=False), 
+				title="User-Game Heatmap (keine Daten)",
+				margin=dict(l=0, r=0, t=30, b=0)
+			))
+		
+		# Berechne Spielzeit pro User-Game-Paar
+		user_game_hours = df_games.groupby(["user_name", "game_name"])["minutes_per_snapshot"].sum().reset_index()
+		user_game_hours["hours"] = user_game_hours["minutes_per_snapshot"] / 60.0
+		
+		if user_game_hours.empty:
+			return go.Figure(layout=dict(
+				xaxis=dict(visible=False), 
+				yaxis=dict(visible=False), 
+				title="User-Game Heatmap (keine Verbindungen)",
+				margin=dict(l=0, r=0, t=30, b=0)
+			))
+		
+		pivot_table = user_game_hours.pivot(index="user_name", columns="game_name", values="hours").fillna(0)
+		
+		if pivot_table.empty:
+			return go.Figure(layout=dict(
+				xaxis=dict(visible=False), 
+				yaxis=dict(visible=False), 
+				title="User-Game Heatmap (keine Verbindungen)",
+				margin=dict(l=0, r=0, t=30, b=0)
+			))
+		
+		fig = px.imshow(
+			pivot_table,
+			labels=dict(x="Spiel", y="Benutzer", color="Stunden"),
+			x=pivot_table.columns,
+			y=pivot_table.index,
+			color_continuous_scale='Viridis',
+			title="User-Game Aktivitäts-Heatmap"
+		)
+		
+		fig.update_xaxes(tickangle=-45)
+		fig.update_layout(margin=dict(l=40, r=40, t=60, b=100))
+		return fig
