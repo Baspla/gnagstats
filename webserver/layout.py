@@ -16,7 +16,6 @@ def get_first_date(data_provider: DataProvider):
 def create_layout(data_provider: DataProvider = None):
     first_date = get_first_date(data_provider) if data_provider is not None else None
     last_date = datetime.datetime.now(cet).date()
-    max_date = datetime.datetime.now(cet).isoformat(timespec="seconds")
     return html.Div(
         [
             html.H2("Gnag Stats"),
@@ -29,8 +28,8 @@ def create_layout(data_provider: DataProvider = None):
                         start_date_placeholder_text="Startdatum",
                         end_date_placeholder_text="Enddatum",
                         min_date_allowed=first_date,
-                        max_date_allowed=max_date,
-                        end_date=max_date,
+                        max_date_allowed=last_date,
+                        end_date=last_date,
                         start_date=first_date,
                     ),
                 ],
@@ -39,6 +38,7 @@ def create_layout(data_provider: DataProvider = None):
             html.Div(
                 [
                     dcc.Graph(id="graph-playtime-pie"),
+                    dcc.Graph(id="graph-24h-voice-activity"),
                 ],
                 id="plots",
             ),

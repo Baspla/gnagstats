@@ -270,7 +270,7 @@ class DataProvider:
         return self.db.web_query_get_first_timestamp()
 
     @lru_cache(maxsize=64)
-    def load_all(self, params: Params) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame,pd.DataFrame,pd.DataFrame]:
+    def load_all(self, params: Params) -> Dict[str, pd.DataFrame]:
         start = params.start
         end = params.end
         df_steam = self._query_steam_game_activity(start, end)
@@ -280,15 +280,15 @@ class DataProvider:
         df_channels = self._query_discord_channels(start, end)
         df_voice_intervals = self._compute_voice_activity_intervals(df_voice)
         df_game_intervals = self._compute_game_activity_intervals(df_combined)
-        return (
-            df_steam,
-            df_discord,
-            df_combined,
-            df_voice,
-            df_channels,
-            df_voice_intervals,
-            df_game_intervals
-        )
+        return {
+            "steam": df_steam,
+            "discord": df_discord,
+            "combined": df_combined,
+            "voice": df_voice,
+            "channels": df_channels,
+            "voice_intervals": df_voice_intervals,
+            "game_intervals": df_game_intervals
+        }
 
     def prepare_bundle(self,params: Params) -> str:
         key = str(uuid.uuid4())
