@@ -389,14 +389,13 @@ def register_callbacks(app, data_provider: DataProvider):
 			width = 1.0 + 7.0 * (weight / w_max) if w_max > 0 else 4.0
 			x0, y0 = pos[u]
 			x1, y1 = pos[v]
-			u_label = G.nodes[u].get("label", str(u))
-			v_label = G.nodes[v].get("label", str(v))
 			edge_traces.append(go.Scatter(
 				x=[x0, x1], y=[y0, y1],
 				mode="lines",
 				line=dict(width=width, color="#aaaaaa"),
 				opacity=0.55,
-				showlegend=False
+				showlegend=False,
+				hoverinfo="skip"  # Remove any hovertext from the edges
 			))
 		
 		# Node-Traces (getrennt für User und Games)
