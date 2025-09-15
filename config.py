@@ -13,6 +13,7 @@ JSON_DATA_PATH : str         = os.getenv("JSON_DATA_PATH", "data.json")  # Pfad 
 DEBUG_MODE : bool             = os.getenv("DEBUG_MODE", "False").lower() == "true"  # Aktiviert/Deaktiviert den Debug-Modus
 PORT : int                      = int(os.getenv("PORT", 5000))  # Port für den Webserver
 HOST : str                     = os.getenv("HOST", "0.0.0.0")  # Host für den Webserver
+BASE_URL : str                 = os.getenv("BASE_URL", "https://example.com/")  # Basis-URL für den Webserver
 WEB_CACHE_TTL_MINUTES : int     = int(os.getenv("WEB_CACHE_TTL_MINUTES", 5))  # Cache/Auto-Refresh Intervall der Web-Ansicht in Minuten
 
 if DISCORD_API_TOKEN == "":

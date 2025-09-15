@@ -4,7 +4,7 @@ import datetime
 
 from data_storage.db import Database, timesteps_to_human_readable, seconds_to_human_readable
 from jinja2 import Environment, FileSystemLoader
-from config import DISCORD_WEBHOOK_URL
+from config import BASE_URL, DISCORD_WEBHOOK_URL
 import requests
 import locale
 locale.setlocale(locale.LC_TIME, "de_DE.UTF-8")
@@ -154,6 +154,8 @@ class NewsletterCreator:
         prev_concurrent_sum = sum_list(prev_most_concurrent_list)
         concurrent_abs, concurrent_pct = calc_change(concurrent_sum, prev_concurrent_sum)
 
+        link = f"{BASE_URL}?start_date={past_start.date()}&end_date={ past_end.date()}"
+
         data = {
             "discord_time_alone": int_lone_time,
             "discord_time_alone_change_abs": lone_abs,
@@ -183,7 +185,8 @@ class NewsletterCreator:
             "steam_most_concurrent_list_capped": most_concurrent_list_capped,
             "discord_active_events": active_events,
             "discord_non_active_events": non_active_events,
-            "birthdays": birthdays
+            "birthdays": birthdays,
+            "link": link
         }
         # birthdays are a list of dictionaries with keys "name" and "birthday" and "next_birthday"
         # discord events are a list of objects with parameters "name", "start_time", "end_time", "description"
