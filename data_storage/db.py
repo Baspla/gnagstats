@@ -503,6 +503,28 @@ class Database:
         result = cursor.fetchall()
         connection.close()
         return result
+    
+    def web_query_get_first_timestamp(self) -> int | None:
+        """
+        Return the earliest timestamp present in any of the activity tables.
+        :return: Earliest timestamp in epoch seconds, or None if no data exists.
+        """
+        connection = sqlite3.connect(DB_PATH)
+        cursor = connection.cursor()
+        cursor.execute('''
+            SELECT MIN(min_timestamp) FROM (
+                SELECT MIN(timestamp) AS min_timestamp FROM discord_voice_activity
+                UNION ALL
+                SELECT MIN(timestamp) AS min_timestamp FROM discord_voice_channels
+                UNION ALL
+                SELECT MIN(timestamp) AS min_timestamp FROM discord_game_activity
+                UNION ALL
+                SELECT MIN(timestamp) AS min_timestamp FROM steam_game_activity
+            )
+        ''')
+        result = cursor.fetchone()
+        connection.close()
+        return result[0] if result and result[0] is not None else None
 
 def seconds_to_human_readable(total_seconds: int):
     """
@@ -583,3 +605,34 @@ def timesteps_to_human_readable(timesteps: int, collection_interval: int = None)
 
     return output.strip()
 
+def minutes_to_human_readable(total_minutes: int):
+    """
+    Konvertiert eine Anzahl von Minuten in ein menschenlesbares Format.
+    :param total_minutes:
+    :return:
+    """
+    logging.debug(f"Converting {total_minutes} minutes to human-readable format.")
+    if not total_minutes:
+        return "0 Minuten"
+    total_minutes = int(total_minutes)
+    days = int(total_minutes // (24 * 60))
+    hours = int((total_minutes % (24 * 60)) // 60)
+    minutes = int(total_minutes % 60)
+    output = ""
+
+    if days == 1:
+        output += f"{days} Tag "
+    elif days > 1:
+        output += f"{days} Tage "
+
+    if hours == 1:
+        output += f"{hours} Stunde "
+    elif hours > 1:
+        output += f"{hours} Stunden "
+
+    if minutes == 1:
+        output += f"{minutes} Minute"
+    elif minutes > 1:
+        output += f"{minutes} Minuten"
+
+    return output.strip()

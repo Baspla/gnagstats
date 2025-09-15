@@ -17,7 +17,8 @@ from data_storage.db import Database
 from discord_bot import DiscordClient
 from data_storage.json_data import  get_data
 from newsletter.newsletter_creator import NewsletterCreator
-from web.web_server import run_webserver
+from webserver.data_provider import DataProvider
+from webserver.wsgi import run_webserver
 
 data = {
     "guild_ids": [],
@@ -131,7 +132,8 @@ async def main():
     setup_logging()
     database = Database()
     # Starte Webserver für Statistiken
-    run_webserver(database, host=HOST, port=PORT)
+    data_provider = DataProvider(database)
+    run_webserver(data_provider, host=HOST, port=PORT)
 
     data = get_data()
     intents = discord.Intents.default()
