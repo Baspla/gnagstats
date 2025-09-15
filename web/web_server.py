@@ -16,8 +16,8 @@ import pandas as pd
 from waitress import serve
 
 from data_storage.db import Database
-from web_data import WebDataLoader
-from web_aggregations import (
+from web.web_data import WebDataLoader
+from web.web_aggregations import (
     agg_playtime_per_game,
     agg_daily_hours,
     agg_heatmap_user_top_games,
