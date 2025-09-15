@@ -23,18 +23,18 @@ def register_callbacks(app, data_provider: DataProvider):
 			return px.pie(names=['Keine Daten'], values=[1], title='Spielzeit pro Spiel')
 
 		playtime = df_combined.groupby('game_name')['minutes_per_snapshot'].sum().reset_index()
+		playtime = playtime.sort_values('minutes_per_snapshot', ascending=False).head(20)
 		playtime['spielzeit'] = playtime['minutes_per_snapshot'].apply(minutes_to_human_readable)
 		fig = px.pie(
 			playtime,
 			names='game_name',
 			values='minutes_per_snapshot',
-			title='Spielzeit pro Spiel',
+			title='Spielzeit pro Spiel (Top 20)',
 			labels={
 				'game_name': 'Spiel',
-				'minutes_per_snapshot': 'Spielzeit (Minuten)',
 				'spielzeit': 'Spielzeit'
 			},
-			hover_data={'spielzeit': True, 'minutes_per_snapshot': True}
+			hover_data={'game_name': True, 'spielzeit': True}
 		)
 		fig.update_traces(text=playtime['spielzeit'], textinfo='label+percent')
 		return fig

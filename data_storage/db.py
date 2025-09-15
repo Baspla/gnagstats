@@ -614,9 +614,10 @@ def minutes_to_human_readable(total_minutes: int):
     logging.debug(f"Converting {total_minutes} minutes to human-readable format.")
     if not total_minutes:
         return "0 Minuten"
-    days = total_minutes // (24 * 60)
-    hours = (total_minutes % (24 * 60)) // 60
-    minutes = total_minutes % 60
+    total_minutes = int(total_minutes)
+    days = int(total_minutes // (24 * 60))
+    hours = int((total_minutes % (24 * 60)) // 60)
+    minutes = int(total_minutes % 60)
     output = ""
 
     if days == 1:
