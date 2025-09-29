@@ -234,7 +234,7 @@ class NewsletterCreator:
         past_start = week_start
         past_end = week_end
 
-        env = Environment(loader=FileSystemLoader('templates'),
+        env = Environment(loader=FileSystemLoader('newsletter/templates'),
                           autoescape=True,
                           trim_blocks=True,
                           lstrip_blocks=True)
@@ -262,7 +262,7 @@ class NewsletterCreator:
         past_start = year_start
         past_end = year_end
 
-        env = Environment(loader=FileSystemLoader('templates'),
+        env = Environment(loader=FileSystemLoader('newsletter/templates'),
                           autoescape=True,
                           trim_blocks=True,
                           lstrip_blocks=True)

@@ -271,35 +271,35 @@ class DataProvider:
     def _query_first_timestamp(self) -> int | None:
         return self.db.web_query_get_first_timestamp()
 
-    @lru_cache(maxsize=64)
+    # --- Öffentliche Aggregations-Schnittstelle für das Web-Frontend ---
     def load_all(self, params: Params) -> Dict[str, pd.DataFrame]:
+        """Lädt und bereitet alle für das Dashboard benötigten DataFrames auf.
+
+        Returns
+        -------
+        dict
+            Enthält Rohdaten & Intervall-Daten:
+            {
+              'voice_raw': df_discord_voice_activity,
+              'voice_intervals': df_voice_intervals,
+              'game_raw': df_combined_games_raw,
+              'game_intervals': df_game_intervals
+            }
+        """
         start = params.start
         end = params.end
-        df_steam = self._query_steam_game_activity(start, end)
-        df_discord = self._query_discord_game_activity(start, end)
-        df_combined = self._compute_game_activity(df_steam, df_discord)
-        df_voice = self._query_discord_voice_activity(start, end)
-        df_channels = self._query_discord_channels(start, end)
-        df_voice_intervals = self._compute_voice_activity_intervals(df_voice)
-        df_game_intervals = self._compute_game_activity_intervals(df_combined)
+        # Rohdaten laden
+        df_voice_raw = self._query_discord_voice_activity(start, end)
+        df_discord_game_raw = self._query_discord_game_activity(start, end)
+        df_steam_game_raw = self._query_steam_game_activity(start, end)
+        # Spiele zusammenführen mit Priorisierung
+        df_game_merged = self._compute_game_activity(df_steam_game_raw, df_discord_game_raw)
+        # Intervalle berechnen
+        df_voice_intervals = self._compute_voice_activity_intervals(df_voice_raw)
+        df_game_intervals = self._compute_game_activity_intervals(df_game_merged)
         return {
-            "steam": df_steam,
-            "discord": df_discord,
-            "games": df_combined,
-            "voice": df_voice,
-            "channels": df_channels,
-            "voice_intervals": df_voice_intervals,
-            "game_intervals": df_game_intervals
+            'voice_raw': df_voice_raw,
+            'voice_intervals': df_voice_intervals,
+            'game_raw': df_game_merged,
+            'game_intervals': df_game_intervals,
         }
-
-    def prepare_bundle(self,params: Params) -> str:
-        key = str(uuid.uuid4())
-        bundle = self.load_all(params)
-        self._registry[key] = bundle
-        return key
-
-    def get_bundle(self,key: str) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame,pd.DataFrame,pd.DataFrame] | None:
-        return self._registry.get(key)
-
-    def evict_bundle(self,key: str) -> None:
-        self._registry.pop(key, None)
