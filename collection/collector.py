@@ -1,6 +1,10 @@
 import logging
+import time
 from datetime import datetime
+from typing import Any, Dict, Optional
 
+import requests
+from requests import exceptions as req_exc
 from discord import ActivityType
 
 from data_storage.db import Database
@@ -54,17 +58,64 @@ class DataCollector:
         pass
 
     async def collect_steam_data(self):
+        """Collect Steam presence/game activity for configured Steam user IDs.
+
+        Adds defensive error handling around the external HTTP calls so that
+        transient SSL / network problems (like handshake failures) don't break
+        the whole loop. Implements a small retry for specific network errors.
+        """
         logging.debug("Collecting Steam data...")
-        timestamp = (datetime.now().timestamp()// 300) * 300
-        for user in self.data["user_steam_ids"]:
-            logging.debug(f"Collecting data for Steam user {user}")
-            # Maybe personaname änderungen tracken?
-            user = self.steam.users.get_user_details(user)
-            if user:
-                logging.debug(f"User data: {user}")
-                if user["player"].get("gameextrainfo"):
-                    logging.debug(f"User is playing steam game: {user["player"]["gameextrainfo"]}")
-                    self.db.insert_steam_game_activity(timestamp,user["player"]["steamid"],user["player"]["gameextrainfo"])
-            else:
-                logging.debug(f"Failed to collect data for Steam user {user}")
-        pass
+        timestamp = (datetime.now().timestamp() // 300) * 300
+
+        # Configurable simple retry parameters (could later move to config)
+        max_retries = 2
+        base_backoff = 1.5  # seconds
+
+        for user_id in self.data.get("user_steam_ids", []):
+            logging.debug(f"Collecting data for Steam user {user_id}")
+            attempt = 0
+            user_details: Optional[Dict[str, Any]] = None
+            while attempt <= max_retries:
+                try:
+                    # The underlying library uses synchronous requests; we just wrap it.
+                    user_details = self.steam.users.get_user_details(user_id)
+                    break
+                except (req_exc.SSLError, req_exc.ConnectionError, req_exc.Timeout) as net_err:
+                    # SSL handshake errors typically fall under SSLError
+                    logging.warning(
+                        f"Steam request network/SSL issue for user {user_id} (attempt {attempt + 1}/{max_retries + 1}): {net_err}"  # noqa: E501
+                    )
+                    if attempt < max_retries:
+                        backoff = base_backoff * (2 ** attempt)
+                        await self._async_sleep(backoff)
+                        attempt += 1
+                        continue
+                    else:
+                        logging.error(f"Giving up on Steam user {user_id} after {attempt + 1} attempts due to network/SSL errors.")
+                        break
+                except Exception as e:
+                    # Catch-all to prevent loop crash; still surfaced in logs.
+                    logging.exception(f"Unexpected error fetching Steam user {user_id}: {e}")
+                    break
+
+            if not user_details:
+                logging.debug(f"No data returned for Steam user {user_id} (maybe profile private or request failed).")
+                continue
+
+            logging.debug(f"User data: {user_details}")
+            player = user_details.get("player", {})
+            game_name = player.get("gameextrainfo")
+            if game_name:
+                logging.debug(f"User {user_id} is playing steam game: {game_name}")
+                try:
+                    self.db.insert_steam_game_activity(timestamp, player.get("steamid", str(user_id)), game_name)
+                except Exception as db_err:
+                    logging.error(f"DB insert failed for Steam game activity (user {user_id}): {db_err}")
+        # explicit return not required
+
+    async def _async_sleep(self, seconds: float):
+        """Isolated small awaitable sleep to make retry logic testable/mutable."""
+        if seconds > 0:
+            # Local import of asyncio to avoid adding a top-level dependency just for a utility
+            import asyncio  # noqa: WPS433
+            await asyncio.sleep(seconds)
