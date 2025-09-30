@@ -15,6 +15,7 @@ PORT : int                      = int(os.getenv("PORT", 5000))  # Port für den 
 HOST : str                     = os.getenv("HOST", "0.0.0.0")  # Host für den Webserver
 BASE_URL : str                 = os.getenv("BASE_URL", "https://example.com/")  # Basis-URL für den Webserver
 WEB_CACHE_TTL_MINUTES : int     = int(os.getenv("WEB_CACHE_TTL_MINUTES", 5))  # Cache/Auto-Refresh Intervall der Web-Ansicht in Minuten
+WEB_FIGURE_REFRESH_MINUTES : int = int(os.getenv("WEB_FIGURE_REFRESH_MINUTES", 10))  # Serverseitiges Rebuild-Intervall der Dashboard-Grafiken
 
 if DISCORD_API_TOKEN == "":
     logging.warning("DISCORD_API_TOKEN is empty. Discord stats collection will be disabled.")
