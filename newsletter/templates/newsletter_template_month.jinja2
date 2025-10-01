@@ -16,20 +16,20 @@ Niemand hat diesen Monat alleine Zeit in einem Voice Channel verbracht. 😊
 {% set vt_trend = '↗️' if discord_time_voice_change_pct > 0 else ('↘️' if discord_time_voice_change_pct < 0 else '➡️') %}
 ({{ vt_trend }} {{ discord_time_voice_change_pct|round(1) }}% zum Vormonat)
 ### **Where's the gaming?** 🎮
-{% if steam_most_played_list_capped is none or steam_most_played_list_capped|length == 0 %}
+{% if combined_most_played_list_capped is none or combined_most_played_list_capped|length == 0 %}
 Es wurden keine Spiele besonders häufig gespielt. 💤
 {% else %}
 Die meistgespielten Spiele diesen Monat:
-{% for game in steam_most_played_list_capped %}
+{% for game in combined_most_played_list_capped %}
 - {{ game[0] }} - {{ game[2]|seconds_to_human_readable }}
 {% endfor %}
 {% endif %}
 
-{% if steam_most_played_together_list_capped is none or steam_most_played_together_list_capped|length == 0 %}
+{% if combined_most_played_together_list_capped is none or combined_most_played_together_list_capped|length == 0 %}
 Es wurden keine Spiele gemeinsam gespielt. 💤
 {% else %}
 Diese Spiele wurden am häufigsten gemeinsam gezockt:
-{% for game in steam_most_played_together_list_capped %}
+{% for game in combined_most_played_together_list_capped %}
 - {{ game[0] }} - {{ game[1]|seconds_to_human_readable }}
 {% endfor %}
 {% endif %}

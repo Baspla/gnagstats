@@ -4,9 +4,19 @@ import datetime
 
 from data_storage.db import Database, timesteps_to_human_readable, seconds_to_human_readable
 from jinja2 import Environment, FileSystemLoader
-from config import BASE_URL, DISCORD_WEBHOOK_URL
+from config import BASE_URL, DISCORD_WEBHOOK_URL, JSON_DATA_PATH
 import requests
 import locale
+import pandas as pd
+
+# Mapping Hilfsfunktionen wie im DataProvider verwenden
+from data_storage.json_data import (
+    load_json_data,
+    get_user_id_to_name_map,
+    get_steam_id_to_user_id_map,
+    get_discord_id_to_user_id_map,
+)
+
 locale.setlocale(locale.LC_TIME, "de_DE.UTF-8")
 
 
@@ -129,6 +139,121 @@ class NewsletterCreator:
         prev_most_played_together_list = self.db.newsletter_query_get_steam_most_played_together(prev_start, prev_end)
         prev_most_concurrent_list = self.db.newsletter_query_get_steam_most_concurrent_players(prev_start, prev_end)
 
+        # ---------------------------------------------------------------
+        # Kombinierte (Steam + Discord) Spielstatistiken (analog DataProvider)
+        # ---------------------------------------------------------------
+        def _load_raw_game_activity(start_dt: datetime.datetime, end_dt: datetime.datetime):
+            start_ts = int(start_dt.timestamp())
+            end_ts = int(end_dt.timestamp())
+            steam_rows = self.db.web_query_get_steam_game_activity(start_ts, end_ts)
+            discord_rows = self.db.web_query_get_discord_game_activity(start_ts, end_ts)
+            return steam_rows, discord_rows
+
+        def _build_dataframe(steam_rows, discord_rows):
+            # steam
+            if steam_rows:
+                df_steam = pd.DataFrame(steam_rows, columns=["timestamp", "steam_id", "game_name", "collection_interval"])  # noqa: E501
+            else:
+                df_steam = pd.DataFrame(columns=["timestamp", "steam_id", "game_name", "collection_interval"])
+            if discord_rows:
+                df_discord = pd.DataFrame(discord_rows, columns=["timestamp", "discord_id", "game_name", "collection_interval"])  # noqa: E501
+            else:
+                df_discord = pd.DataFrame(columns=["timestamp", "discord_id", "game_name", "collection_interval"])
+
+            if df_steam.empty and df_discord.empty:
+                return pd.DataFrame(columns=["timestamp", "user_name", "game_name", "collection_interval", "source"])
+
+            json_data = load_json_data(JSON_DATA_PATH)
+            id_map = get_user_id_to_name_map(json_data) if isinstance(json_data, dict) else {}
+            steam_id_map = get_steam_id_to_user_id_map(json_data) if isinstance(json_data, dict) else {}
+            discord_id_map = get_discord_id_to_user_id_map(json_data) if isinstance(json_data, dict) else {}
+
+            if not df_steam.empty:
+                df_steam["user_id"] = df_steam["steam_id"].astype(str).map(steam_id_map).fillna(df_steam["steam_id"].astype(str)) if steam_id_map else df_steam["steam_id"].astype(str)
+                df_steam["user_name"] = df_steam["user_id"].astype(str).map(id_map).fillna(df_steam["user_id"].astype(str)) if id_map else df_steam["user_id"].astype(str)
+                df_steam["source"] = "steam"
+            if not df_discord.empty:
+                df_discord["user_id"] = df_discord["discord_id"].astype(str).map(discord_id_map).fillna(df_discord["discord_id"].astype(str)) if discord_id_map else df_discord["discord_id"].astype(str)
+                df_discord["user_name"] = df_discord["user_id"].astype(str).map(id_map).fillna(df_discord["user_id"].astype(str)) if id_map else df_discord["user_id"].astype(str)
+                df_discord["source"] = "discord"
+
+            df_all = pd.concat([
+                df_steam[["timestamp", "user_name", "game_name", "collection_interval", "source"]] if not df_steam.empty else pd.DataFrame(columns=["timestamp", "user_name", "game_name", "collection_interval", "source"]),
+                df_discord[["timestamp", "user_name", "game_name", "collection_interval", "source"]] if not df_discord.empty else pd.DataFrame(columns=["timestamp", "user_name", "game_name", "collection_interval", "source"]),
+            ], ignore_index=True)
+
+            if df_all.empty:
+                return df_all
+
+            # Priorität: Steam überschreibt Discord bei gleicher (user_name, timestamp)
+            df_all = df_all.sort_values(by=["user_name", "timestamp", "source"], ascending=[True, True, True])
+            df_all["key"] = df_all["user_name"].astype(str) + "_" + df_all["timestamp"].astype(str)
+            steam_keys = set(df_all[df_all["source"] == "steam"]["key"])  # Keys mit Steam-Eintrag
+            df_all = df_all[(df_all["source"] == "steam") | (~df_all["key"].isin(steam_keys))]
+            df_all = df_all.drop(columns=["key"])  # Cleanup
+            return df_all.reset_index(drop=True)
+
+        def _aggregate_most_played(df_all: pd.DataFrame):
+            if df_all.empty:
+                return []
+            df = df_all.copy()
+            df["collection_interval"] = df["collection_interval"].fillna(300)
+            grouped = df.groupby("game_name").agg(count=("timestamp", "count"), total_playtime=("collection_interval", "sum")).reset_index()
+            grouped = grouped.sort_values(by=["count", "total_playtime"], ascending=[False, False])
+            return list(grouped.itertuples(index=False, name=None))  # (game_name, count, total_playtime)
+
+        def _aggregate_most_concurrent(df_all: pd.DataFrame):
+            if df_all.empty:
+                return []
+            df = df_all.copy()
+            # Player pro (timestamp, game)
+            concurrent = df.groupby(["timestamp", "game_name"])['user_name'].nunique().reset_index(name='player_count')
+            concurrent = concurrent.sort_values(by="player_count", ascending=False)
+            # Rückgabe analog Steam: (game_name, player_count)
+            return list(concurrent[['game_name', 'player_count']].itertuples(index=False, name=None))
+
+        def _aggregate_most_played_together(df_all: pd.DataFrame):
+            if df_all.empty:
+                return []
+            df = df_all.copy()
+            df["collection_interval"] = df["collection_interval"].fillna(300)
+            # Gruppiere Snapshot-Ebene
+            snap = df.groupby(["timestamp", "game_name"]).agg(
+                player_count=("user_name", "nunique"),
+                total_playtime=("collection_interval", "sum"),
+            ).reset_index()
+            snap = snap[snap["player_count"] >= 2]
+            if snap.empty:
+                return []
+            agg = snap.groupby("game_name").agg(
+                occurrences=("timestamp", "count"),
+                total_playtime=("total_playtime", "sum"),
+            ).reset_index()
+            agg = agg.sort_values(by=["occurrences", "total_playtime"], ascending=[False, False])
+            # (game_name, occurrences, total_playtime)
+            return list(agg.itertuples(index=False, name=None))
+
+        # Aktueller Zeitraum kombiniertes DF
+        steam_rows_curr, discord_rows_curr = _load_raw_game_activity(past_start, past_end)
+        df_combined_curr = _build_dataframe(steam_rows_curr, discord_rows_curr)
+        combined_most_played_list = _aggregate_most_played(df_combined_curr)
+        combined_most_concurrent_list = _aggregate_most_concurrent(df_combined_curr)
+        combined_most_played_together_list = _aggregate_most_played_together(df_combined_curr)
+
+        combined_most_played_list_capped = combined_most_played_list[:5] if combined_most_played_list else None
+        combined_most_played_together_list_capped = combined_most_played_together_list[:3] if combined_most_played_together_list else None
+        combined_most_concurrent_list_capped = combined_most_concurrent_list[:3] if combined_most_concurrent_list else None
+        combined_most_played = combined_most_played_list[0][0] if combined_most_played_list else None
+        combined_most_played_together = combined_most_played_together_list[0][0] if combined_most_played_together_list else None
+        combined_most_concurrent = combined_most_concurrent_list[0][0] if combined_most_concurrent_list else None
+
+        # Vorzeitraum kombiniert
+        steam_rows_prev, discord_rows_prev = _load_raw_game_activity(prev_start, prev_end)
+        df_combined_prev = _build_dataframe(steam_rows_prev, discord_rows_prev)
+        prev_combined_most_played_list = _aggregate_most_played(df_combined_prev)
+        prev_combined_most_concurrent_list = _aggregate_most_concurrent(df_combined_prev)
+        prev_combined_most_played_together_list = _aggregate_most_played_together(df_combined_prev)
+
         # Hilfsfunktionen für Prozent und Absolut
         def calc_change(current, previous):
             abs_change = current - previous
@@ -153,6 +278,19 @@ class NewsletterCreator:
         concurrent_sum = sum_list(most_concurrent_list)
         prev_concurrent_sum = sum_list(prev_most_concurrent_list)
         concurrent_abs, concurrent_pct = calc_change(concurrent_sum, prev_concurrent_sum)
+
+        # Combined Veränderung berechnen
+        combined_played_sum = sum_list(combined_most_played_list)
+        prev_combined_played_sum = sum_list(prev_combined_most_played_list)
+        combined_played_abs, combined_played_pct = calc_change(combined_played_sum, prev_combined_played_sum)
+
+        combined_played_together_sum = sum_list(combined_most_played_together_list)
+        prev_combined_played_together_sum = sum_list(prev_combined_most_played_together_list)
+        combined_played_together_abs, combined_played_together_pct = calc_change(combined_played_together_sum, prev_combined_played_together_sum)
+
+        combined_concurrent_sum = sum_list(combined_most_concurrent_list)
+        prev_combined_concurrent_sum = sum_list(prev_combined_most_concurrent_list)
+        combined_concurrent_abs, combined_concurrent_pct = calc_change(combined_concurrent_sum, prev_combined_concurrent_sum)
 
         link = f"{BASE_URL}?start_date={past_start.date()}&end_date={ past_end.date()}"
 
@@ -183,6 +321,22 @@ class NewsletterCreator:
             "steam_most_played_list_capped": most_played_list_capped,
             "steam_most_played_together_list_capped": most_played_together_list_capped,
             "steam_most_concurrent_list_capped": most_concurrent_list_capped,
+            # Kombinierte Statistiken
+            "combined_most_played": combined_most_played,
+            "combined_most_played_list": combined_most_played_list,
+            "combined_most_played_list_change_abs": combined_played_abs,
+            "combined_most_played_list_change_pct": combined_played_pct,
+            "combined_most_played_together": combined_most_played_together,
+            "combined_most_played_together_list": combined_most_played_together_list,
+            "combined_most_played_together_list_change_abs": combined_played_together_abs,
+            "combined_most_played_together_list_change_pct": combined_played_together_pct,
+            "combined_most_concurrent_players": combined_most_concurrent,
+            "combined_most_concurrent_list": combined_most_concurrent_list,
+            "combined_most_concurrent_list_change_abs": combined_concurrent_abs,
+            "combined_most_concurrent_list_change_pct": combined_concurrent_pct,
+            "combined_most_played_list_capped": combined_most_played_list_capped,
+            "combined_most_played_together_list_capped": combined_most_played_together_list_capped,
+            "combined_most_concurrent_list_capped": combined_most_concurrent_list_capped,
             "discord_active_events": active_events,
             "discord_non_active_events": non_active_events,
             "birthdays": birthdays,
