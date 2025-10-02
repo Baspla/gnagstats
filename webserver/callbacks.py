@@ -9,8 +9,12 @@ kann man erneut einen Callback hinzufügen, der die Build-Funktionen aufruft.
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import pytz
 
 from data_storage.db import minutes_to_human_readable
+
+# Ziel-Zeitzone für Darstellung (automatische Umstellung Sommer/Winterzeit)
+LOCAL_TZ = pytz.timezone("Europe/Berlin")
 from webserver.data_provider import DataProvider, Params
 
 
@@ -39,8 +43,9 @@ def _build_voice_activity_figure(df_voice_intervals: pd.DataFrame) -> go.Figure:
                 title="Voice-Aktivität der letzten 24 Stunden (keine gültigen Daten)",
                 margin=dict(l=0, r=0, t=30, b=0)
             ))
-        df_clean['start_dt'] = pd.to_datetime(df_clean['start_ts'], unit='s', errors='coerce')
-        df_clean['end_dt'] = pd.to_datetime(df_clean['end_ts'], unit='s', errors='coerce')
+        # Zeitstempel zuerst als UTC interpretieren, dann in Europe/Berlin konvertieren (inkl. DST)
+        df_clean['start_dt'] = pd.to_datetime(df_clean['start_ts'], unit='s', utc=True, errors='coerce').dt.tz_convert(LOCAL_TZ)
+        df_clean['end_dt'] = pd.to_datetime(df_clean['end_ts'], unit='s', utc=True, errors='coerce').dt.tz_convert(LOCAL_TZ)
         df_clean = df_clean.dropna(subset=['start_dt', 'end_dt'])
         if df_clean.empty:
             return go.Figure(layout=dict(
@@ -60,7 +65,7 @@ def _build_voice_activity_figure(df_voice_intervals: pd.DataFrame) -> go.Figure:
             hover_data={'user_name': True, 'channel_name': True, 'start_dt': True, 'end_dt': True, 'dauer': True}
         )
         fig.update_yaxes(title_text='Benutzer', autorange="reversed")
-        fig.update_xaxes(title_text='Zeit')
+        fig.update_xaxes(title_text='Zeit (Europe/Berlin)')
         fig.update_layout(legend_title_text='Channel')
         return fig
     except Exception as e:  # pragma: no cover - defensiver Fallback
@@ -94,8 +99,9 @@ def _build_game_activity_figure(df_game_intervals: pd.DataFrame) -> go.Figure:
                 title="Spielaktivität der letzten 24 Stunden (keine gültigen Daten)",
                 margin=dict(l=0, r=0, t=30, b=0)
             ))
-        df_clean['start_dt'] = pd.to_datetime(df_clean['start_ts'], unit='s', errors='coerce')
-        df_clean['end_dt'] = pd.to_datetime(df_clean['end_ts'], unit='s', errors='coerce')
+        # Zeitstempel als UTC -> Europe/Berlin (mit DST)
+        df_clean['start_dt'] = pd.to_datetime(df_clean['start_ts'], unit='s', utc=True, errors='coerce').dt.tz_convert(LOCAL_TZ)
+        df_clean['end_dt'] = pd.to_datetime(df_clean['end_ts'], unit='s', utc=True, errors='coerce').dt.tz_convert(LOCAL_TZ)
         df_clean = df_clean.dropna(subset=['start_dt', 'end_dt'])
         if df_clean.empty:
             return go.Figure(layout=dict(
@@ -115,7 +121,7 @@ def _build_game_activity_figure(df_game_intervals: pd.DataFrame) -> go.Figure:
             hover_data={'user_name': True, 'game_name': True, 'start_dt': True, 'end_dt': True, 'dauer': True, 'source': True}
         )
         fig.update_yaxes(title_text='Benutzer', autorange="reversed")
-        fig.update_xaxes(title_text='Zeit')
+        fig.update_xaxes(title_text='Zeit (Europe/Berlin)')
         fig.update_layout(legend_title_text='Spiel')
         return fig
     except Exception as e:  # pragma: no cover
