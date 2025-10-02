@@ -19,7 +19,7 @@ def create_layout(voice_fig=None, game_fig=None):
         dcc.Location(id='url', refresh=False),
         html.H2("Gnag Stats"),
         html.Div([
-            dcc.Graph(id="graph-24h-voice-activity", figure=voice_fig),
-            dcc.Graph(id="graph-24h-game-activity", figure=game_fig),
+            dcc.Graph(id="graph-24h-voice-activity", figure=voice_fig, config={'displayModeBar': False}),
+            dcc.Graph(id="graph-24h-game-activity", figure=game_fig, config={'displayModeBar': False}),
         ], id="plots"),
     ])
