@@ -19,40 +19,35 @@ from webserver.data_provider import DataProvider, Params
 
 
 def _build_voice_activity_figure(df_voice_intervals: pd.DataFrame) -> go.Figure:
-    if df_voice_intervals.empty:
-        return go.Figure(layout=dict(
-            xaxis=dict(visible=False),
-            yaxis=dict(visible=False),
-            title="Voice-Aktivität der letzten 24 Stunden (keine Daten)",
+    # Referenzzeitraum: immer die letzten 24h (Ende = jetzt in LOCAL_TZ)
+    end_dt = pd.Timestamp.now(tz=LOCAL_TZ)
+    start_dt = end_dt - pd.Timedelta(hours=24)
+    def _empty_figure(title: str) -> go.Figure:
+        fig = go.Figure()
+        fig.update_layout(
+            title=title,
             margin=dict(l=0, r=0, t=30, b=0)
-        ))
+        )
+        # Achse immer voller 24h Bereich + kein Zoomen / Panning
+        fig.update_xaxes(range=[start_dt, end_dt], title_text='Zeit (Europe/Berlin)', fixedrange=True)
+        fig.update_yaxes(visible=False, fixedrange=True)
+        return fig
+    if df_voice_intervals.empty:
+        return _empty_figure("Voice-Aktivität der letzten 24 Stunden (keine Daten)")
     try:
         required_columns = ['user_name', 'start_ts', 'end_ts', 'duration_minutes']
         for col in required_columns:
             if col not in df_voice_intervals.columns:
-                return go.Figure(layout=dict(
-                    xaxis=dict(visible=False),
-                    yaxis=dict(visible=False),
-                    title=f"Voice-Aktivität der letzten 24 Stunden (Fehler: Spalte '{col}' fehlt)",
-                    margin=dict(l=0, r=0, t=30, b=0)
-                ))
+                return _empty_figure(f"Voice-Aktivität der letzten 24 Stunden (Fehler: Spalte '{col}' fehlt)")
         df_clean = df_voice_intervals.copy().dropna(subset=['user_name', 'start_ts', 'end_ts'])
         if df_clean.empty:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                title="Voice-Aktivität der letzten 24 Stunden (keine gültigen Daten)",
-                margin=dict(l=0, r=0, t=30, b=0)
-            ))
+            return _empty_figure("Voice-Aktivität der letzten 24 Stunden (keine gültigen Daten)")
         # Zeitstempel zuerst als UTC interpretieren, dann in Europe/Berlin konvertieren (inkl. DST)
         df_clean['start_dt'] = pd.to_datetime(df_clean['start_ts'], unit='s', utc=True, errors='coerce').dt.tz_convert(LOCAL_TZ)
         df_clean['end_dt'] = pd.to_datetime(df_clean['end_ts'], unit='s', utc=True, errors='coerce').dt.tz_convert(LOCAL_TZ)
         df_clean = df_clean.dropna(subset=['start_dt', 'end_dt'])
         if df_clean.empty:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                title="Voice-Aktivität der letzten 24 Stunden (ungültige Zeitstempel)",
-                margin=dict(l=0, r=0, t=30, b=0)
-            ))
+            return _empty_figure("Voice-Aktivität der letzten 24 Stunden (ungültige Zeitstempel)")
         df_clean['dauer'] = df_clean['duration_minutes'].apply(lambda x: minutes_to_human_readable(x) if pd.notna(x) else "Unbekannt")
         fig = px.timeline(
             df_clean,
@@ -64,51 +59,43 @@ def _build_voice_activity_figure(df_voice_intervals: pd.DataFrame) -> go.Figure:
             },
             hover_data={'user_name': True, 'channel_name': True, 'start_dt': True, 'end_dt': True, 'dauer': True}
         )
-        fig.update_yaxes(title_text='Benutzer', autorange="reversed")
-        fig.update_xaxes(title_text='Zeit (Europe/Berlin)')
+        fig.update_yaxes(title_text='Benutzer', autorange="reversed", fixedrange=True)
+        # Immer fester 24h Bereich
+        fig.update_xaxes(title_text='Zeit (Europe/Berlin)', range=[start_dt, end_dt], fixedrange=True)
         fig.update_layout(legend_title_text='Channel')
         return fig
     except Exception as e:  # pragma: no cover - defensiver Fallback
-        return go.Figure(layout=dict(
-            xaxis=dict(visible=False), yaxis=dict(visible=False),
-            title=f"Voice-Aktivität der letzten 24 Stunden (Fehler: {str(e)})",
-            margin=dict(l=0, r=0, t=30, b=0)
-        ))
+        return _empty_figure(f"Voice-Aktivität der letzten 24 Stunden (Fehler: {str(e)})")
 
 
 def _build_game_activity_figure(df_game_intervals: pd.DataFrame) -> go.Figure:
-    if df_game_intervals.empty:
-        return go.Figure(layout=dict(
-            xaxis=dict(visible=False), yaxis=dict(visible=False),
-            title="Spielaktivität der letzten 24 Stunden (keine Daten)",
+    end_dt = pd.Timestamp.now(tz=LOCAL_TZ)
+    start_dt = end_dt - pd.Timedelta(hours=24)
+    def _empty_figure(title: str) -> go.Figure:
+        fig = go.Figure()
+        fig.update_layout(
+            title=title,
             margin=dict(l=0, r=0, t=30, b=0)
-        ))
+        )
+        fig.update_xaxes(range=[start_dt, end_dt], title_text='Zeit (Europe/Berlin)', fixedrange=True)
+        fig.update_yaxes(visible=False, fixedrange=True)
+        return fig
+    if df_game_intervals.empty:
+        return _empty_figure("Spielaktivität der letzten 24 Stunden (keine Daten)")
     try:
         required_columns = ['user_name', 'start_ts', 'end_ts', 'game_name', 'duration_minutes', 'source']
         for col in required_columns:
             if col not in df_game_intervals.columns:
-                return go.Figure(layout=dict(
-                    xaxis=dict(visible=False), yaxis=dict(visible=False),
-                    title=f"Spielaktivität der letzten 24 Stunden (Fehler: Spalte '{col}' fehlt)",
-                    margin=dict(l=0, r=0, t=30, b=0)
-                ))
+                return _empty_figure(f"Spielaktivität der letzten 24 Stunden (Fehler: Spalte '{col}' fehlt)")
         df_clean = df_game_intervals.copy().dropna(subset=['user_name', 'start_ts', 'end_ts', 'game_name', 'source'])
         if df_clean.empty:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                title="Spielaktivität der letzten 24 Stunden (keine gültigen Daten)",
-                margin=dict(l=0, r=0, t=30, b=0)
-            ))
+            return _empty_figure("Spielaktivität der letzten 24 Stunden (keine gültigen Daten)")
         # Zeitstempel als UTC -> Europe/Berlin (mit DST)
         df_clean['start_dt'] = pd.to_datetime(df_clean['start_ts'], unit='s', utc=True, errors='coerce').dt.tz_convert(LOCAL_TZ)
         df_clean['end_dt'] = pd.to_datetime(df_clean['end_ts'], unit='s', utc=True, errors='coerce').dt.tz_convert(LOCAL_TZ)
         df_clean = df_clean.dropna(subset=['start_dt', 'end_dt'])
         if df_clean.empty:
-            return go.Figure(layout=dict(
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                title="Spielaktivität der letzten 24 Stunden (ungültige Zeitstempel)",
-                margin=dict(l=0, r=0, t=30, b=0)
-            ))
+            return _empty_figure("Spielaktivität der letzten 24 Stunden (ungültige Zeitstempel)")
         df_clean['dauer'] = df_clean['duration_minutes'].apply(lambda x: minutes_to_human_readable(x) if pd.notna(x) else "Unbekannt")
         fig = px.timeline(
             df_clean,
@@ -120,16 +107,12 @@ def _build_game_activity_figure(df_game_intervals: pd.DataFrame) -> go.Figure:
             },
             hover_data={'user_name': True, 'game_name': True, 'start_dt': True, 'end_dt': True, 'dauer': True, 'source': True}
         )
-        fig.update_yaxes(title_text='Benutzer', autorange="reversed")
-        fig.update_xaxes(title_text='Zeit (Europe/Berlin)')
+        fig.update_yaxes(title_text='Benutzer', autorange="reversed", fixedrange=True)
+        fig.update_xaxes(title_text='Zeit (Europe/Berlin)', range=[start_dt, end_dt], fixedrange=True)
         fig.update_layout(legend_title_text='Spiel')
         return fig
     except Exception as e:  # pragma: no cover
-        return go.Figure(layout=dict(
-            xaxis=dict(visible=False), yaxis=dict(visible=False),
-            title=f"Spielaktivität der letzten 24 Stunden (Fehler: {str(e)})",
-            margin=dict(l=0, r=0, t=30, b=0)
-        ))
+        return _empty_figure(f"Spielaktivität der letzten 24 Stunden (Fehler: {str(e)})")
 
 
 def build_initial_figures(data_provider: DataProvider):
