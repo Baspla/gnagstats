@@ -1,9 +1,6 @@
 import logging
 from datetime import datetime as dt
 import datetime
-from tkinter import N
-
-from numpy import long
 
 from collection.current_events import CurrentEventFetcher
 from data_storage.db import Database, timesteps_to_human_readable, seconds_to_human_readable
