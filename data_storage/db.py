@@ -2,7 +2,10 @@ import logging
 import sqlite3
 from datetime import datetime
 
-from config import DB_PATH, DATA_COLLECTION_INTERVAL
+import pandas as pd
+
+from config import DB_PATH, DATA_COLLECTION_INTERVAL, JSON_DATA_PATH
+from data_storage.json_data import get_discord_id_to_user_id_map, get_steam_id_to_user_id_map, get_user_id_to_name_map, load_json_data
 
 
 class Database:
@@ -266,16 +269,247 @@ class Database:
         result = cursor.fetchone()
         connection.close()
         return result
+    
+    def query_get_game_activity_sessions(self, start_dt: datetime, end_dt: datetime):
+        game_activity = self.query_get_game_activity_dataframe(start_dt, end_dt)
+        import math
+        if game_activity.empty:
+            return pd.DataFrame(columns=["user_name", "game_name", "source", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
+        df = game_activity.copy()
+        if "timestamp" not in df.columns:
+            return pd.DataFrame(columns=["user_name", "game_name", "source", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
+        if "user_name" not in df.columns:
+            if "user_id" in df.columns:
+                df["user_name"] = df["user_id"]
+            else:
+                return pd.DataFrame(columns=["user_name", "game_name", "source", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
+        if "game_name" not in df.columns:
+            df["game_name"] = "?"
+        if "collection_interval" not in df.columns:
+            df["collection_interval"] = 300.0
+        if "source" not in df.columns:
+            df["source"] = "unknown"
+        sessions = []
+        for (user, game, source), g in df.groupby(["user_name", "game_name", "source"]):
+            g = g.sort_values("timestamp").reset_index(drop=True)
+            current = None
+            prev_row = None
+            default_interval = float(g["collection_interval"].dropna().median() if not g["collection_interval"].dropna().empty else 300.0)
+            for _, row in g.iterrows():
+                ts = int(row["timestamp"])
+                interv = row.get("collection_interval")
+                try:
+                    interv = float(interv or default_interval)
+                    if not math.isfinite(interv) or interv <= 0:
+                        raise ValueError
+                except Exception:
+                    interv = default_interval
+                snapshot_end = ts + interv
+                if current is None:
+                    current = {"user_name": user, "game_name": game, "source": source, "start_ts": ts, "end_ts": snapshot_end}
+                else:
+                    gap = ts - prev_row["timestamp"] if prev_row is not None else 0
+                    prev_interv = prev_row.get("collection_interval") if prev_row is not None else default_interval
+                    try:
+                        prev_interv = float(prev_interv or default_interval)
+                        if not math.isfinite(prev_interv) or prev_interv <= 0:
+                            raise ValueError
+                    except Exception:
+                        prev_interv = default_interval
+                    max_gap = 2 * max(prev_interv, interv)
+                    if gap <= max_gap:
+                        if snapshot_end > current["end_ts"]:
+                            current["end_ts"] = snapshot_end
+                    else:
+                        if current["end_ts"] > current["start_ts"]:
+                            sessions.append(current)
+                        current = {"user_name": user, "game_name": game, "source": source, "start_ts": ts, "end_ts": snapshot_end}
+                prev_row = row
+            if current is not None and current["end_ts"] > current["start_ts"]:
+                sessions.append(current)
+        if not sessions:
+            return pd.DataFrame(columns=["user_name", "game_name", "source", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
+        sess_df = pd.DataFrame(sessions)
+        sess_df["start_dt"] = pd.to_datetime(sess_df["start_ts"], unit="s")
+        sess_df["end_dt"] = pd.to_datetime(sess_df["end_ts"], unit="s")
+        sess_df["duration_seconds"] = (sess_df["end_ts"] - sess_df["start_ts"]).astype(float)
+        sess_df["duration_minutes"] = sess_df["duration_seconds"] / 60.0
+        sess_df["duration_hours"] = sess_df["duration_minutes"] / 60.0
+        sess_df = sess_df[sess_df["duration_seconds"] > 0]
+        return sess_df.reset_index(drop=True)
+    
+    def query_get_game_activity_dataframe(self, start_dt: datetime, end_dt: datetime) -> pd.DataFrame:
+        steam_rows, discord_rows = self._load_raw_game_activity(start_dt, end_dt)
+        df = self._build_dataframe(steam_rows, discord_rows)
+        return df
 
-    #
-    # Utilities
-    #
+    def _load_raw_game_activity(self,start_dt: datetime, end_dt: datetime):
+            start_ts = int(start_dt.timestamp())
+            end_ts = int(end_dt.timestamp())
+            steam_rows = self.get_steam_game_activity(start_ts, end_ts)
+            discord_rows = self.get_discord_game_activity(start_ts, end_ts)
+            return steam_rows, discord_rows
+
+    def _build_dataframe(self,steam_rows, discord_rows):
+        # steam
+        if steam_rows:
+            df_steam = pd.DataFrame(steam_rows, columns=["timestamp", "steam_id", "game_name", "collection_interval"])  # noqa: E501
+        else:
+            df_steam = pd.DataFrame(columns=["timestamp", "steam_id", "game_name", "collection_interval"])
+        if discord_rows:
+            df_discord = pd.DataFrame(discord_rows, columns=["timestamp", "discord_id", "game_name", "collection_interval"])  # noqa: E501
+        else:
+            df_discord = pd.DataFrame(columns=["timestamp", "discord_id", "game_name", "collection_interval"])
+
+        if df_steam.empty and df_discord.empty:
+            return pd.DataFrame(columns=["timestamp", "user_name", "game_name", "collection_interval", "source"])
+
+        json_data = load_json_data(JSON_DATA_PATH)
+        id_map = get_user_id_to_name_map(json_data) if isinstance(json_data, dict) else {}
+        steam_id_map = get_steam_id_to_user_id_map(json_data) if isinstance(json_data, dict) else {}
+        discord_id_map = get_discord_id_to_user_id_map(json_data) if isinstance(json_data, dict) else {}
+
+        if not df_steam.empty:
+            df_steam["user_id"] = df_steam["steam_id"].astype(str).map(steam_id_map).fillna(df_steam["steam_id"].astype(str)) if steam_id_map else df_steam["steam_id"].astype(str)
+            df_steam["user_name"] = df_steam["user_id"].astype(str).map(id_map).fillna(df_steam["user_id"].astype(str)) if id_map else df_steam["user_id"].astype(str)
+            df_steam["source"] = "steam"
+        if not df_discord.empty:
+            df_discord["user_id"] = df_discord["discord_id"].astype(str).map(discord_id_map).fillna(df_discord["discord_id"].astype(str)) if discord_id_map else df_discord["discord_id"].astype(str)
+            df_discord["user_name"] = df_discord["user_id"].astype(str).map(id_map).fillna(df_discord["user_id"].astype(str)) if id_map else df_discord["user_id"].astype(str)
+            df_discord["source"] = "discord"
+
+        df_all = pd.concat([
+            df_steam[["timestamp", "user_name", "game_name", "collection_interval", "source"]] if not df_steam.empty else pd.DataFrame(columns=["timestamp", "user_name", "game_name", "collection_interval", "source"]),
+            df_discord[["timestamp", "user_name", "game_name", "collection_interval", "source"]] if not df_discord.empty else pd.DataFrame(columns=["timestamp", "user_name", "game_name", "collection_interval", "source"]),
+        ], ignore_index=True)
+
+        if df_all.empty:
+            return df_all
+
+        # Priorität: Steam überschreibt Discord bei gleicher (user_name, timestamp)
+        df_all = df_all.sort_values(by=["user_name", "timestamp", "source"], ascending=[True, True, True])
+        df_all["key"] = df_all["user_name"].astype(str) + "_" + df_all["timestamp"].astype(str)
+        steam_keys = set(df_all[df_all["source"] == "steam"]["key"])  # Keys mit Steam-Eintrag
+        df_all = df_all[(df_all["source"] == "steam") | (~df_all["key"].isin(steam_keys))]
+        df_all = df_all.drop(columns=["key"])  # Cleanup
+        return df_all.reset_index(drop=True)
+
+    def newsletter_query_get_voice_total(self, start_time: datetime, end_time: datetime) -> int:
+        connection = sqlite3.connect(DB_PATH)
+        cursor = connection.cursor()
+        cursor.execute('''
+            SELECT SUM(user_count * collection_interval) as total_voicetime
+            FROM discord_voice_channels
+            WHERE timestamp BETWEEN ? AND ? AND user_count > 1 AND collection_interval IS NOT NULL
+        ''', (int(start_time.timestamp()), int(end_time.timestamp())))
+        result = cursor.fetchone()
+        connection.close()
+        return result[0] if result and result[0] is not None else 0
+
+    def newsletter_query_get_voice_alone(self, start_time: datetime, end_time: datetime) -> int:
+        connection = sqlite3.connect(DB_PATH)
+        cursor = connection.cursor()
+        cursor.execute('''
+            SELECT SUM(user_count * collection_interval) as total_lonely_voicetime
+            FROM discord_voice_channels
+            WHERE timestamp BETWEEN ? AND ? AND user_count = 1 AND collection_interval IS NOT NULL
+        ''', (int(start_time.timestamp()), int(end_time.timestamp())))
+        result = cursor.fetchone()
+        connection.close()
+        return result[0] if result and result[0] is not None else 0
+    
+    def newsletter_query_get_voice_together(self, start_time: datetime, end_time: datetime) -> int:
+        connection = sqlite3.connect(DB_PATH)
+        cursor = connection.cursor()
+        cursor.execute('''
+            SELECT SUM(collection_interval) as total_voicetime
+            FROM (
+            SELECT DISTINCT timestamp, collection_interval
+            FROM discord_voice_channels
+            WHERE timestamp BETWEEN ? AND ? AND user_count > 1 AND collection_interval IS NOT NULL
+            )
+        ''', (int(start_time.timestamp()), int(end_time.timestamp())))
+        result = cursor.fetchone()
+        connection.close()
+        return result[0] if result and result[0] is not None else 0
+    
+    def newsletter_query_get_gaming_total(self, start_time: datetime, end_time: datetime) -> int:
+        connection = sqlite3.connect(DB_PATH)
+        cursor = connection.cursor()
+        cursor.execute('''
+            SELECT SUM(collection_interval) as total_gaming_time
+            FROM discord_game_activity
+            WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
+        ''', (int(start_time.timestamp()), int(end_time.timestamp())))
+        result = cursor.fetchone()
+        discord_time = result[0] if result and result[0] is not None else 0
+        cursor.execute('''
+            SELECT SUM(collection_interval) as total_gaming_time
+            FROM steam_game_activity
+            WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
+        ''', (int(start_time.timestamp()), int(end_time.timestamp())))
+        result = cursor.fetchone()
+        steam_time = result[0] if result and result[0] is not None else 0
+        connection.close()
+        combined_time = discord_time + steam_time
+        return combined_time
+
+    def newsletter_query_get_playtime(self, start_time: datetime, end_time: datetime):
+        # Return a list of all games from both steam_game_activity and discord_game_activity with total playtime in the given range.
+        connection = sqlite3.connect(DB_PATH)
+        cursor = connection.cursor()
+        cursor.execute('''
+            SELECT game_name, SUM(collection_interval) as total_playtime
+            FROM (
+                SELECT game_name, collection_interval
+                FROM steam_game_activity
+                WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
+                UNION ALL
+                SELECT game_name, collection_interval
+                FROM discord_game_activity
+                WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
+            )
+            GROUP BY game_name
+            ORDER BY total_playtime DESC
+        ''', (int(start_time.timestamp()), int(end_time.timestamp()), int(start_time.timestamp()), int(end_time.timestamp())))
+        result = cursor.fetchall()
+        connection.close()
+        return result
+
+    def newsletter_query_get_biggest_groups(self, start_time: datetime, end_time: datetime):
+        # Return a list of all games by largest concurrent players in the given range from both steam_game_activity and discord_game_activity.
+        connection = sqlite3.connect(DB_PATH)
+        cursor = connection.cursor()
+        cursor.execute('''
+            SELECT game_name, COUNT(DISTINCT user_id) AS player_count
+            FROM (
+                SELECT timestamp, game_name, steam_id AS user_id
+                FROM steam_game_activity
+                WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
+                UNION ALL
+                SELECT timestamp, game_name, discord_id AS user_id
+                FROM discord_game_activity
+                WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
+            )
+            GROUP BY game_name, timestamp
+            ORDER BY player_count DESC
+        ''', (int(start_time.timestamp()), int(end_time.timestamp()), int(start_time.timestamp()), int(end_time.timestamp())))
+        result = cursor.fetchall()
+        connection.close()
+        return result
+        
+    def newsletter_query_get_longest_sessions(self, start_time: datetime, end_time: datetime):
+        # Return a set of all games by longest single session in the given range from both steam_game_activity and discord_game_activity.
+        game_activity = self.query_get_game_activity_sessions(start_time, end_time)
+        grouped = game_activity.groupby(["game_name","user_name","source"])["duration_seconds"].max().reset_index()
+        sorted_grouped = grouped.sort_values(by="duration_seconds", ascending=False)
+        return sorted_grouped
 
     #
     # Web queries (separate from newsletter queries)
     #
 
-    def web_query_get_steam_game_activity(self, start_time: int | None = None, end_time: int | None = None):
+    def get_steam_game_activity(self, start_time: int | None = None, end_time: int | None = None):
         """
         Return raw steam game activity rows for the web app.
         Each row contains: timestamp, steam_id, game_name, collection_interval.
@@ -333,7 +567,7 @@ class Database:
         connection.close()
         return result
 
-    def web_query_get_discord_voice_activity(self, start_time: int | None = None, end_time: int | None = None):
+    def get_discord_voice_activity(self, start_time: int | None = None, end_time: int | None = None):
         """
         Return raw discord voice activity rows for the web app.
         Each row contains: timestamp, discord_id, channel_name, guild_id, collection_interval.
@@ -447,7 +681,7 @@ class Database:
         connection.close()
         return result
 
-    def web_query_get_discord_game_activity(self, start_time: int | None = None, end_time: int | None = None):
+    def get_discord_game_activity(self, start_time: int | None = None, end_time: int | None = None):
         """
         Return raw discord game activity rows for the web app.
         Each row contains: timestamp, discord_id, game_name, collection_interval.
@@ -532,7 +766,6 @@ def seconds_to_human_readable(total_seconds: int):
     :param total_seconds:
     :return:
     """
-    logging.debug(f"Converting {total_seconds} seconds to human-readable format.")
     if not total_seconds:
         return "0 Minuten"
     days = total_seconds // (24 * 3600)
@@ -542,28 +775,28 @@ def seconds_to_human_readable(total_seconds: int):
     output = ""
 
     if days == 1:
-        output += f"{days} Tag "
+        output += f"{days:<.0f} Tag "
     elif days > 1:
-        output += f"{days} Tage "
+        output += f"{days:.0f} Tage "
 
     if hours == 1:
-        output += f"{hours} Stunde "
+        output += f"{hours:.0f} Stunde "
     elif hours > 1:
-        output += f"{hours} Stunden "
+        output += f"{hours:.0f} Stunden "
 
     if minutes == 1:
-        output += f"{minutes} Minute "
+        output += f"{minutes:.0f} Minute "
     elif minutes > 1:
-        output += f"{minutes} Minuten "
+        output += f"{minutes:.0f} Minuten "
 
     if seconds == 1:
-        output += f"{seconds} Sekunde"
+        output += f"{seconds:.0f} Sekunde"
     elif seconds > 1:
-        output += f"{seconds} Sekunden"
+        output += f"{seconds:.0f} Sekunden"
 
     return output.strip()
 
-def timesteps_to_human_readable(timesteps: int, collection_interval: int = None):
+def timesteps_to_human_readable(timesteps: int, collection_interval = None):
     """
     Konvertiert eine Anzahl von Timesteps in ein menschenlesbares Format.
     Ein Timestep ist collection_interval Sekunden lang (Standard: DATA_COLLECTION_INTERVAL).
@@ -571,7 +804,6 @@ def timesteps_to_human_readable(timesteps: int, collection_interval: int = None)
     :param collection_interval: Sekunden pro Timestep
     :return:
     """
-    logging.debug(f"Converting {timesteps} timesteps to human-readable format.")
     if not timesteps:
         return "0 Minuten"
     if collection_interval is None:
@@ -611,7 +843,6 @@ def minutes_to_human_readable(total_minutes: int):
     :param total_minutes:
     :return:
     """
-    logging.debug(f"Converting {total_minutes} minutes to human-readable format.")
     if not total_minutes:
         return "0 Minuten"
     total_minutes = int(total_minutes)

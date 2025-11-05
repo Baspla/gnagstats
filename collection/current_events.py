@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 import logging
 from datetime import datetime
 
@@ -13,10 +14,11 @@ class CurrentEventFetcher:
         self.data = data
         self.steam = steam
 
-    def get_guild_events(self):
+    def get_guild_events(self) -> Sequence[discord.ScheduledEvent]:
         for guild in self.discord_client.guilds:
             if str(guild.id) in self.data["guild_ids"]:
                 return guild.scheduled_events
+        return []
 
     def unfiltered(self):
         return [event for event in self.get_guild_events()]

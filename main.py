@@ -1,4 +1,6 @@
 import asyncio
+from fileinput import filename
+from json import load
 import logging
 import time
 from asyncio import create_task
@@ -10,7 +12,7 @@ from discord.webhook.async_ import async_context
 from steam_web_api import Steam
 
 from collection.collector import DataCollector
-from config import LOGGING_LEVEL, DISCORD_API_TOKEN, DISCORD_STATS_ENABLED, STEAM_API_KEY, DATA_COLLECTION_INTERVAL, \
+from config import LOGGING_LEVEL, DISCORD_API_TOKEN, DISCORD_STATS_ENABLED, LOGGING_LEVEL_DISCORD, STEAM_API_KEY, DATA_COLLECTION_INTERVAL, \
     DEBUG_MODE, PORT, HOST
 from collection.current_events import CurrentEventFetcher
 from data_storage.db import Database
@@ -30,6 +32,11 @@ data = {
 
 
 def setup_logging():
+    logging.getLogger("discord.client").setLevel(LOGGING_LEVEL_DISCORD)
+    logging.getLogger("discord.gateway").setLevel(LOGGING_LEVEL_DISCORD)
+    logging.getLogger("discord.http").setLevel(LOGGING_LEVEL_DISCORD)
+    logging.getLogger("discord.state").setLevel(LOGGING_LEVEL_DISCORD)
+
     # Configure logging
     logging.basicConfig(
         level=LOGGING_LEVEL,
@@ -65,7 +72,7 @@ def should_publish_newsletter(newsletter_type, now, interval_minutes, last_newsl
         )
     return False
 
-async def check_and_publish_newsletter(now, interval_minutes, last_weekly_newsletter_day, last_monthly_newsletter_day, newsletter_creator):
+async def check_and_publish_newsletter(now, interval_minutes, last_weekly_newsletter_day, last_monthly_newsletter_day, newsletter_creator: NewsletterCreator):
     day_of_year = now.tm_yday
     # Weekly Newsletter
     if should_publish_newsletter("weekly", now, interval_minutes, last_weekly_newsletter_day):
@@ -90,14 +97,6 @@ async def check_and_publish_newsletter(now, interval_minutes, last_weekly_newsle
 
 async def core_loop(collector, newsletter_creator):
     logging.info("Starting core loop...")
-    if DEBUG_MODE:
-        logging.info("Debug mode is enabled. Waiting for 10 seconds before starting the newsletter creation.")
-        await asyncio.sleep(10)
-        day_last_week = dt.now() - datetime.timedelta(days=7)
-        newsletter_creator.create_weekly_newsletter(day_last_week.isocalendar())
-        last_month = dt.now().month - 1 if dt.now().month > 1 else 12
-        year = dt.now().year if dt.now().month > 1 else dt.now().year - 1
-        newsletter_creator.create_monthly_newsletter(year, last_month)
     await asyncio.sleep(DATA_COLLECTION_INTERVAL)
     last_weekly_newsletter_day = None
     last_monthly_newsletter_day = None
@@ -128,6 +127,7 @@ async def core_loop(collector, newsletter_creator):
             logging.debug(f"Sleeping for {sleep_time} seconds.")
             await asyncio.sleep(sleep_time)
 
+
 async def main():
     setup_logging()
     database = Database()
@@ -145,6 +145,31 @@ async def main():
     current_event_fetcher = CurrentEventFetcher(discord_client, data,steam)
     newsletter_creator = NewsletterCreator(current_event_fetcher,database)
     coreloop = create_task(core_loop(collector,newsletter_creator))
+    
+    if DEBUG_MODE:
+        logging.info("Debug mode is enabled. Waiting 10 seconds before publishing test newsletter.")
+        time.sleep(10)
+        day_last_week = dt.now() - datetime.timedelta(days=7)
+        last_month = dt.now().month - 1 if dt.now().month > 1 else 12
+        year = dt.now().year if dt.now().month > 1 else dt.now().year - 1   
+        try:
+            newsletter_creator.create_weekly_newsletter(day_last_week.isocalendar())
+        except Exception as e:
+            logging.error(f"Error creating weekly newsletter: {e}")
+            logging.exception("Stack trace:")
+        
+        try:
+            newsletter_creator.create_monthly_newsletter(year, last_month)
+        except Exception as e:
+            logging.error(f"Error creating monthly newsletter: {e}")
+            logging.exception("Stack trace:")
+        try:
+            newsletter_creator.create_yearly_newsletter(dt.now().year)
+        except Exception as e:
+            logging.error(f"Error creating yearly newsletter: {e}")
+            logging.exception("Stack trace:")
+        
+
     try:
         if DISCORD_STATS_ENABLED:
             await asyncio.gather(

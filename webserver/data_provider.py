@@ -29,7 +29,7 @@ class DataProvider:
 
 
     def _query_steam_game_activity(self,start: int | None, end: int | None) -> pd.DataFrame:
-        rows = self.db.web_query_get_steam_game_activity(start, end)
+        rows = self.db.get_steam_game_activity(start, end)
         df = (
             pd.DataFrame(rows, columns=["timestamp", "steam_id", "game_name", "collection_interval"]) if rows
             else pd.DataFrame(columns=["timestamp", "steam_id", "game_name", "collection_interval", 
@@ -45,7 +45,7 @@ class DataProvider:
         return df
 
     def _query_discord_game_activity(self,start: int | None, end: int | None) -> pd.DataFrame:
-        rows = self.db.web_query_get_discord_game_activity(start, end)
+        rows = self.db.get_discord_game_activity(start, end)
         df = (
             pd.DataFrame(rows, columns=["timestamp", "discord_id", "game_name", "collection_interval"]) if rows
             else pd.DataFrame(columns=["timestamp", "discord_id", "game_name", "collection_interval",
@@ -61,7 +61,7 @@ class DataProvider:
         return df
 
     def _query_discord_voice_activity(self,start: int | None, end: int | None) -> pd.DataFrame:
-        rows = self.db.web_query_get_discord_voice_activity(start, end)
+        rows = self.db.get_discord_voice_activity(start, end)
         df = (
             pd.DataFrame(rows, columns=["timestamp", "discord_id", "channel_name", "guild_id", "collection_interval"]) if rows
             else pd.DataFrame(columns=["timestamp", "discord_id", "channel_name", "guild_id", "collection_interval", 
@@ -108,9 +108,16 @@ class DataProvider:
         steam = steam[['timestamp', 'user_name', 'game_name', 'minutes_per_snapshot', 'source']]
         discord = discord[['timestamp', 'user_name', 'game_name', 'minutes_per_snapshot', 'source']]
 
-        # Kombiniere beide DataFrames
-        combined = pd.concat([steam, discord], ignore_index=True)
-
+        # Kombiniere beide DataFrames falls sie nicht leer sind
+        if steam.empty:
+            logging.debug("Steam dataframe is empty, returning Discord dataframe only.")
+            combined = discord
+        elif discord.empty:
+            logging.debug("Discord dataframe is empty, returning Steam dataframe only.")
+            combined = steam
+        else:
+            combined = pd.concat([steam, discord], ignore_index=True)
+        
         # Sortiere nach Quelle, damit Steam-Einträge zuerst kommen
         combined = combined.sort_values(by=['user_name', 'timestamp', 'source'], ascending=[True, True, True])
 
@@ -161,7 +168,7 @@ class DataProvider:
                 chan = row.get("channel_name", "?") or "?"
                 interv = row.get("collection_interval")
                 try:
-                    interv = float(interv)
+                    interv = float(interv or default_interval)
                     if not math.isfinite(interv) or interv <= 0:
                         raise ValueError
                 except Exception:
@@ -173,7 +180,7 @@ class DataProvider:
                     gap = ts - prev_row["timestamp"] if prev_row is not None else 0
                     prev_interv = prev_row.get("collection_interval") if prev_row is not None else default_interval
                     try:
-                        prev_interv = float(prev_interv)
+                        prev_interv = float(prev_interv or default_interval)
                         if not math.isfinite(prev_interv) or prev_interv <= 0:
                             raise ValueError
                     except Exception:
@@ -229,7 +236,7 @@ class DataProvider:
                 ts = int(row["timestamp"])
                 interv = row.get("collection_interval")
                 try:
-                    interv = float(interv)
+                    interv = float(interv or default_interval)
                     if not math.isfinite(interv) or interv <= 0:
                         raise ValueError
                 except Exception:
@@ -241,7 +248,7 @@ class DataProvider:
                     gap = ts - prev_row["timestamp"] if prev_row is not None else 0
                     prev_interv = prev_row.get("collection_interval") if prev_row is not None else default_interval
                     try:
-                        prev_interv = float(prev_interv)
+                        prev_interv = float(prev_interv or default_interval)
                         if not math.isfinite(prev_interv) or prev_interv <= 0:
                             raise ValueError
                     except Exception:

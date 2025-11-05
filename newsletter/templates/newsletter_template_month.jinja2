@@ -1,101 +1,119 @@
-## **Monatlicher Gnag Newsletter** 📢
-Hier ist der Gnag Newsletter für **{{ month_name }}**!
-### **Was war los im Discord?** 🎙️
-{% if discord_users_voice == 0 %}
-Diesen Monat war niemand in einem Voice Channel. 🤐
-{% elif discord_users_voice == 1 %}
-Es war nur einmal jemand diesen Monat da. 🙃
+# **Monatlicher Gnag Newsletter** 📢
+
+Hier ist der Gnag Newsletter für {{ title_period.month }}.
+
+## **Was war los im Discord?** 🎙️
+{% if voice.total.current and voice.total.current > 0 %}
+
+	{% if voice.total.change.percentage %}
+        {% set total_trend = '↗️' if voice.total.change.percentage > 0 else ('↘️' if voice.total.change.percentage < 0 else '➡️') %}
+        Insgesamt wurden **{{ voice.total.current | seconds_to_human_readable }}** Lebenszeit in Discord verbracht. ({{ total_trend }} {{ voice.total.change.percentage | round(1) }}% zum vorigen Monat)
+    {% else %}
+        Insgesamt wurden **{{ voice.total.current | seconds_to_human_readable }}** Lebenszeit in Discord verbracht.
+    {% endif %}
 {% else %}
-Insgesamt waren **{{ discord_users_voice }} Leute** aktiv in den Voice Channels und haben **{{ discord_time_voice|seconds_to_human_readable }}** miteinander gesprochen. 👥
-{% endif %}
-{% if discord_time_alone|seconds_to_human_readable != "0 Minuten" %}
-Für ganze **{{ discord_time_alone|seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel. 😔
-{% else %}
-Niemand hat diesen Monat alleine Zeit in einem Voice Channel verbracht. 😊
-{% endif %}
-{% set vt_trend = '↗️' if discord_time_voice_change_pct > 0 else ('↘️' if discord_time_voice_change_pct < 0 else '➡️') %}
-({{ vt_trend }} {{ discord_time_voice_change_pct|round(1) }}% zum Vormonat)
-### **Where's the gaming?** 🎮
-{% if combined_most_played_list_capped is none or combined_most_played_list_capped|length == 0 %}
-Es wurden keine Spiele besonders häufig gespielt. 💤
-{% else %}
-Die meistgespielten Spiele diesen Monat:
-{% for game in combined_most_played_list_capped %}
-- {{ game[0] }} - {{ game[2]|seconds_to_human_readable }}
-{% endfor %}
+Keine Voice-Aktivität im aktuellen Monat.
 {% endif %}
 
-{% if combined_most_played_together_list_capped is none or combined_most_played_together_list_capped|length == 0 %}
-Es wurden keine Spiele gemeinsam gespielt. 💤
-{% else %}
-Diese Spiele wurden am häufigsten gemeinsam gezockt:
-{% for game in combined_most_played_together_list_capped %}
-- {{ game[0] }} - {{ game[1]|seconds_to_human_readable }}
-{% endfor %}
+{% if voice.together.current and voice.together.current > 0 %}
+    {% if voice.together.change.percentage %}
+        {% set together_trend = '↗️' if voice.together.change.percentage > 0 else ('↘️' if voice.together.change.percentage < 0 else '➡️') %}
+        **{{ voice.together.current | seconds_to_human_readable }}** des Monats wurde im Discord zusammen verbracht. ({{ together_trend }} {{ voice.together.change.percentage | round(1) }}% zum vorigen Monat)
+    {% else %}
+        **{{ voice.together.current | seconds_to_human_readable }}** des Monats wurde im Discord zusammen verbracht.
+    {% endif %}
 {% endif %}
-### **Was geht grade ab?** 📅
-{% if discord_active_events|length == 0 %}
-Derzeit gibt es keine aktiven Events.
-{% elif discord_active_events|length == 1 %}
-{% if discord_active_events[0].end_time %}
-Derzeit läuft noch **{{ discord_active_events[0].name }}** bis <t:{{ discord_active_events[0].end_time | datetime_to_timestamp }}:f>
-{% else %}
-Derzeit läuft noch **{{ discord_active_events[0].name }}**.
-{% endif %}
-{% if discord_active_events[0].description %}
-Die Beschreibung lautet: {{ discord_active_events[0].description }}
-{% endif %}
-{% else %}
-Derzeit laufen folgende Events:
-{% for event in discord_active_events %}
 
-**{{ event.name }}**
-🕒 Startzeit: <t:{{ event.start_time | datetime_to_timestamp }}:f>
-{% if event.end_time %}
-⏳ Endzeit: <t:{{ event.end_time | datetime_to_timestamp }}:f>
+{% if voice.alone.current and voice.alone.current > 0 %}
+    {% if voice.alone.change.percentage %}
+        {% set alone_trend = '↗️' if voice.alone.change.percentage > 0 else ('↘️' if voice.alone.change.percentage < 0 else '➡️') %}
+        Für ganze **{{ voice.alone.current | seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel. ({{ alone_trend }} {{ voice.alone.change.percentage | round(1) }}% zum vorigen Monat)
+    {% else %}
+        Für ganze **{{ voice.alone.current | seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel.
+    {% endif %}
 {% endif %}
-{% if event.description %}
-Die Beschreibung lautet: {{ event.description }}
-{% endif %}
-{% endfor %}
-{% endif %}
-### **Geplante Events** 🔮
-{% if discord_non_active_events|length == 0 %}
-Es sind bisher keine weiteren Events im nächsten Monat geplant.
-{% elif discord_non_active_events|length == 1 %}
-{% if discord_non_active_events[0].end_time %}
-Bald steht noch **{{ discord_non_active_events[0].name }}** von <t:{{ discord_non_active_events[0].start_time | datetime_to_timestamp }}:f> bis <t:{{ discord_non_active_events[0].end_time | datetime_to_timestamp }}:f> an.
-{% else %}
-Bald steht noch **{{ discord_non_active_events[0].name }}** an. Da geht es am <t:{{ discord_non_active_events[0].start_time | datetime_to_timestamp }}:f> los.
-{% endif %}
-{% if discord_non_active_events[0].description %}
-Die Beschreibung lautet: {{ discord_non_active_events[0].description }}
-{% endif %}
-{% else %}
-Es sind folgende weitere Events im nächsten Monat geplant:
-{% for event in discord_non_active_events %}
 
-**{{ event.name }}**
-🕒 Startzeit: <t:{{ event.start_time | datetime_to_timestamp }}:f>
-{% if event.end_time %}
-⏳ Endzeit: <t:{{ event.end_time | datetime_to_timestamp }}:f>
-{% endif %}
-{% if event.description %}
-Die Beschreibung lautet: {{ event.description }}
-{% endif %}
-{% endfor %}
-{% endif %}
-### **Geburtstage** 🎉
-{% if birthdays|length == 0 %}
-Im nächsten Monat hat niemand Geburtstag. 🎂
-{% elif birthdays|length == 1 %}
-Am <t:{{ birthdays[0].next_birthday | datetime_to_timestamp }}:D> hat **{{ birthdays[0].name }}** Geburtstag!  🎉🎂
+## **Where's the gaming?** 🎮
+{% if gaming.total.current and gaming.total.current > 0 %}
+    {% if gaming.total.change.percentage %}
+        {% set gtotal_trend = '↗️' if gaming.total.change.percentage > 0 else ('↘️' if gaming.total.change.percentage < 0 else '➡️') %}
+        Zusammengerechnet hat die Gnag **{{ gaming.total.current | seconds_to_human_readable }}** gegamed. ({{ gtotal_trend }} {{ gaming.total.change.percentage | round(1) }}% zum vorigen Monat)
+    {% else %}
+        Zusammengerechnet hat die Gnag **{{ gaming.total.current | seconds_to_human_readable }}** gegamed.
+    {% endif %}
 {% else %}
-Folgende Geburtstage stehen an:
+Keine Gaming-Daten für den aktuellen Monat.
+{% endif %}
+
+{% if gaming.most_playtime and gaming.most_playtime.entries and gaming.most_playtime.entries|length > 0 %}
+    ### Timesink
+    {% for e in gaming.most_playtime.entries[:5] %}
+        {{ e.rank }}. **{{ e.name }}** - {{ e.current_value | seconds_to_human_readable }}{% if e.change_this %} ({{ '↗️' if e.change_this.percentage > 0 else ('↘️' if e.change_this.percentage < 0 else '➡️') }} {{ e.change_this.percentage | round(1) }}% zum vorigen Monat){% endif %}<nop>
+    {% endfor %}
+{% endif %}
+
+### The Biggest Gaming
+Die größte Ansammlung gabs bei **{{ gaming.biggest_groups.entries[0].name }}** wo **{{ gaming.biggest_groups.entries[0].current_value }} Gamer** gleichzeitig gespielt haben.
+    {% if gaming.biggest_groups.entries[0].change_rank %}
+        {% if gaming.biggest_groups.entries[0].change_rank.absolute > 0 %}
+            (↗️ {{ gaming.biggest_groups.entries[0].change_rank.absolute }} mehr als die größte Gruppe letzten Monat)
+            {% elif gaming.biggest_groups.entries[0].change_rank.absolute < 0 %}
+            (↘️ {{ gaming.biggest_groups.entries[0].change_rank.absolute | abs }} weniger als die größte Gruppe letzten Monat)
+            {% else %}
+            (➡️ genauso viele wie letzten Monat)
+        {% endif %}
+    {% endif %}
+
+{% if gaming.longest_sessions and gaming.longest_sessions.entries and gaming.longest_sessions.entries|length > 0 %}
+    ### In den Bann gezogen
+    {% for e in gaming.longest_sessions.entries[:5] %}
+        {% if e.current_value >= 3600 %}
+            {{ e.rank }}. **{{ e.user_name }}** in **{{ e.game_name }}** - {{ e.current_value | seconds_to_human_readable }}{% if e.change_rank and e.change_rank.absolute != 0 %} ({{ '↗️' if e.change_rank.absolute > 0 else '↘️' }} {{ e.change_rank.absolute | abs | seconds_to_human_readable }}){% endif %}<nop>
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+## **Aktuelle und geplante Events** 📅
+{% if events.active and events.active|length > 0 %}
+    Derzeit laufende Events:
+    {% for event in events.active %}
+        <br>
+        **{{ event.name }}**
+        🕒 Start: <t:{{ event.start_time | datetime_to_timestamp }}:f>
+            {% if event.end_time %}
+                ⏳ Ende: <t:{{ event.end_time | datetime_to_timestamp }}:f>
+            {% endif %}
+        {% if event.description %}
+            Beschreibung: {{ event.description }}
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+{% if events.upcoming and events.upcoming|length > 0 %}
+    Geplante Events:
+    {% for event in events.upcoming %}
+        <br>
+        **{{ event.name }}** - Start: <t:{{ event.start_time | datetime_to_timestamp }}:f>
+        {% if event.end_time %}
+            ⏳ Ende: <t:{{ event.end_time | datetime_to_timestamp }}:f>
+        {% endif %}
+        {% if event.description %}
+            Beschreibung: {{ event.description }}
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+{% if not events.active and not events.upcoming %}
+    Keine laufenden oder geplanten Events.
+{% endif %}
+
+{% if birthdays and birthdays|length > 0 %}
+## **Geburtstage** 🎉
 {% for birthday in birthdays %}
-Am <t:{{ birthday.next_birthday | datetime_to_timestamp }}:D> hat **{{ birthday.name }}** Geburtstag!  🎉🎈
+Am <t:{{ birthday.next_birthday | datetime_to_timestamp }}:D> hat **{{ birthday.name }}** Geburtstag!
 {% endfor %}
 {% endif %}
 
-✨ Danke fürs Lesen und bis zum nächsten Monat! ✨
+<br>
+✨ Danke fürs Lesen! ✨
 [Zum Gnag Dashboard]({{ link }})
