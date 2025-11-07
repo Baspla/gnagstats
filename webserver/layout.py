@@ -17,6 +17,11 @@ def create_layout(voice_fig=None, game_fig=None):
     """
     return html.Div([
         dcc.Location(id='url', refresh=False),
+        dcc.Interval(
+            id='interval-refresh',
+            interval=10*60*1000,  # 10 Minuten in Millisekunden
+            n_intervals=0
+        ),
         html.H2("Gnag Stats"),
         html.Div([
             dcc.Graph(id="graph-24h-voice-activity", figure=voice_fig, config={'displayModeBar': False}),

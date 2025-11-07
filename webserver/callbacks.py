@@ -130,4 +130,18 @@ def build_initial_figures(data_provider: DataProvider):
     return {"voice": voice_fig, "game": game_fig}
 
 
-# Die frühere Funktion register_callbacks entfällt, wird für statische Graphen nicht benötigt.
+def register_callbacks(app):
+    """Registriert Callbacks für die App (z.B. Page Refresh)."""
+    from dash import Input, Output
+    from dash.exceptions import PreventUpdate
+    
+    @app.callback(
+        Output('url', 'pathname'),
+        Input('interval-refresh', 'n_intervals')
+    )
+    def refresh_page(n):
+        """Löst eine Seitenaktualisierung aus, wenn das Interval feuert."""
+        if n is None or n == 0:
+            raise PreventUpdate
+        # Gibt den gleichen Pfad zurück, um die Seite neu zu laden
+        return '/'

@@ -97,7 +97,7 @@ async def check_and_publish_newsletter(now, interval_minutes, last_weekly_newsle
 
 async def core_loop(collector, newsletter_creator):
     logging.info("Starting core loop...")
-    await asyncio.sleep(DATA_COLLECTION_INTERVAL)
+    # await asyncio.sleep(DATA_COLLECTION_INTERVAL)
     last_weekly_newsletter_day = None
     last_monthly_newsletter_day = None
     interval_minutes = DATA_COLLECTION_INTERVAL // 60

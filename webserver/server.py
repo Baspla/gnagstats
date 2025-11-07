@@ -9,7 +9,7 @@ from flask import Flask
 from config import WEB_FIGURE_REFRESH_MINUTES
 from webserver.data_provider import DataProvider
 from webserver.layout import create_layout
-from webserver.callbacks import build_initial_figures
+from webserver.callbacks import build_initial_figures, register_callbacks
 
 
 class FigureCache:
@@ -64,4 +64,8 @@ def create_app(data_provider: DataProvider):
         return create_layout(voice_fig=figs.get("voice"), game_fig=figs.get("game"))
 
     app.layout = dynamic_layout
+    
+    # Callbacks registrieren (z.B. für Page Refresh)
+    register_callbacks(app)
+    
     return app
