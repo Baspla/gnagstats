@@ -104,174 +104,9 @@ class Database:
     #
     # Queries
     #
-
-    def newsletter_query_get_steam_most_played_games(self, start_time: int, end_time: int):
-        """
-        Get the most played games in a given time range, including total playtime.
-        :param start_time:
-        :param end_time:
-        :return:
-        """
-        if isinstance(start_time, datetime):
-            start_time = int(start_time.timestamp())
-        if isinstance(end_time, datetime):
-            end_time = int(end_time.timestamp())
-        connection = sqlite3.connect(DB_PATH)
-        cursor = connection.cursor()
-        cursor.execute('''
-            SELECT game_name, COUNT(*) as count, SUM(collection_interval) as total_playtime
-            FROM steam_game_activity
-            WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
-            GROUP BY game_name
-            ORDER BY count DESC
-        ''', (start_time, end_time))
-        result = cursor.fetchall()
-        connection.close()
-        return result
-
-    def newsletter_query_get_steam_most_concurrent_players(self, start_time: int, end_time: int):
-        """
-        Get the games played by most players concurrently in a given time range.
-        :param start_time:
-        :param end_time:
-        :return:
-        """
-        if isinstance(start_time, datetime):
-            start_time = int(start_time.timestamp())
-        if isinstance(end_time, datetime):
-            end_time = int(end_time.timestamp())
-        connection = sqlite3.connect(DB_PATH)
-        cursor = connection.cursor()
-        cursor.execute('''
-            SELECT game_name, COUNT(DISTINCT steam_id) AS player_count
-            FROM steam_game_activity
-            WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
-            GROUP BY timestamp, game_name
-            ORDER BY player_count DESC
-        ''', (start_time, end_time))
-        result = cursor.fetchall()
-        connection.close()
-        return result
-
-    def newsletter_query_get_steam_most_played_together(self, start_time: int, end_time: int):
-        if isinstance(start_time, datetime):
-            start_time = int(start_time.timestamp())
-        if isinstance(end_time, datetime):
-            end_time = int(end_time.timestamp())
-        connection = sqlite3.connect(DB_PATH)
-        cursor = connection.cursor()
-        cursor.execute('''
-        SELECT game_name, COUNT(*) AS occurrences, SUM(total_playtime) AS total_playtime
-            FROM (
-                SELECT timestamp, game_name, SUM(collection_interval) AS total_playtime
-                FROM steam_game_activity
-                WHERE collection_interval IS NOT NULL
-                GROUP BY timestamp, game_name
-                HAVING COUNT(DISTINCT steam_id) >= 2
-            ) grouped_games
-        WHERE timestamp BETWEEN ? AND ?
-        GROUP BY game_name
-        ORDER BY occurrences DESC
-        LIMIT 1;
-        ''', (start_time, end_time))
-        result = cursor.fetchall()
-        connection.close()
-        return result
-
-    def newsletter_query_get_discord_busiest_voice_channels(self, start_time: int, end_time: int):
-        """
-        Get the busiest Discord voice channels in a given time range.
-        Calculated by summing up user_count * collection_interval for each channel with usercounts > 1.
-        :param start_time:
-        :param end_time:
-        :return:
-        """
-        if isinstance(start_time, datetime):
-            start_time = int(start_time.timestamp())
-        if isinstance(end_time, datetime):
-            end_time = int(end_time.timestamp())
-        connection = sqlite3.connect(DB_PATH)
-        cursor = connection.cursor()
-        cursor.execute('''
-            SELECT channel_name,
-                   SUM(user_count * collection_interval) as total_voicetime
-            FROM discord_voice_channels
-            WHERE timestamp BETWEEN ? AND ? AND user_count > 1 AND collection_interval IS NOT NULL
-            GROUP BY channel_name
-            ORDER BY total_voicetime DESC
-        ''', (start_time, end_time))
-        result = cursor.fetchall()
-        connection.close()
-        return result
-
-    def newsletter_query_get_discord_total_voice_activity(self, start_time: int, end_time: int):
-        """
-        Get the total Discord voice activity time (in seconds) in a given time range for channels with >1 users.
-        :param start_time:
-        :param end_time:
-        :return:
-        """
-        if isinstance(start_time, datetime):
-            start_time = int(start_time.timestamp())
-        if isinstance(end_time, datetime):
-            end_time = int(end_time.timestamp())
-        connection = sqlite3.connect(DB_PATH)
-        cursor = connection.cursor()
-        cursor.execute('''
-            SELECT SUM(user_count * collection_interval) as total_voicetime
-            FROM discord_voice_channels
-            WHERE timestamp BETWEEN ? AND ? AND user_count > 1 AND collection_interval IS NOT NULL
-        ''', (start_time, end_time))
-        result = cursor.fetchone()
-        connection.close()
-        return result
-
-    def newsletter_query_get_discord_total_lonely_voice_activity(self, start_time: int, end_time: int):
-        """
-        Get the total Discord voice activity time (in seconds) in a given time range for channels with only 1 user.
-        :param start_time:
-        :param end_time:
-        :return:
-        """
-        if isinstance(start_time, datetime):
-            start_time = int(start_time.timestamp())
-        if isinstance(end_time, datetime):
-            end_time = int(end_time.timestamp())
-        connection = sqlite3.connect(DB_PATH)
-        cursor = connection.cursor()
-        cursor.execute('''
-            SELECT SUM(user_count * collection_interval) as total_lonely_voicetime
-            FROM discord_voice_channels
-            WHERE timestamp BETWEEN ? AND ? AND user_count = 1 AND collection_interval IS NOT NULL
-        ''', (start_time, end_time))
-        result = cursor.fetchone()
-        connection.close()
-        return result
-
-    def newsletter_query_get_discord_unique_active_users(self, start_time: int, end_time: int):
-        """
-        Get the unique active users in a given time range.
-        :param start_time:
-        :param end_time:
-        :return:
-        """
-        if isinstance(start_time, datetime):
-            start_time = int(start_time.timestamp())
-        if isinstance(end_time, datetime):
-            end_time = int(end_time.timestamp())
-        connection = sqlite3.connect(DB_PATH)
-        cursor = connection.cursor()
-        cursor.execute('''
-            SELECT COUNT(DISTINCT discord_id) as unique_users
-            FROM discord_voice_activity
-            WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
-        ''', (start_time, end_time))
-        result = cursor.fetchone()
-        connection.close()
-        return result
     
-    def query_get_game_activity_sessions(self, start_dt: datetime, end_dt: datetime):
-        game_activity = self.query_get_game_activity_dataframe(start_dt, end_dt)
+    def process_game_activity_sessions(self, df: pd.DataFrame) -> pd.DataFrame:
+        game_activity = df
         import math
         if game_activity.empty:
             return pd.DataFrame(columns=["user_name", "game_name", "source", "start_ts", "end_ts", "start_dt", "end_dt", "duration_seconds", "duration_minutes", "duration_hours"])
@@ -337,6 +172,10 @@ class Database:
         sess_df["duration_hours"] = sess_df["duration_minutes"] / 60.0
         sess_df = sess_df[sess_df["duration_seconds"] > 0]
         return sess_df.reset_index(drop=True)
+
+    def query_get_game_activity_sessions(self, start_dt: datetime, end_dt: datetime):
+        game_activity = self.query_get_game_activity_dataframe(start_dt, end_dt)
+        return self.process_game_activity_sessions(game_activity)
     
     def query_get_game_activity_dataframe(self, start_dt: datetime, end_dt: datetime) -> pd.DataFrame:
         steam_rows, discord_rows = self._load_raw_game_activity(start_dt, end_dt)
@@ -433,74 +272,34 @@ class Database:
         connection.close()
         return result[0] if result and result[0] is not None else 0
     
-    def newsletter_query_get_gaming_total(self, start_time: datetime, end_time: datetime) -> int:
-        connection = sqlite3.connect(DB_PATH)
-        cursor = connection.cursor()
-        cursor.execute('''
-            SELECT SUM(collection_interval) as total_gaming_time
-            FROM discord_game_activity
-            WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
-        ''', (int(start_time.timestamp()), int(end_time.timestamp())))
-        result = cursor.fetchone()
-        discord_time = result[0] if result and result[0] is not None else 0
-        cursor.execute('''
-            SELECT SUM(collection_interval) as total_gaming_time
-            FROM steam_game_activity
-            WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
-        ''', (int(start_time.timestamp()), int(end_time.timestamp())))
-        result = cursor.fetchone()
-        steam_time = result[0] if result and result[0] is not None else 0
-        connection.close()
-        combined_time = discord_time + steam_time
-        return combined_time
+    def newsletter_query_get_gaming_total(self, df: pd.DataFrame) -> int:
+        if df.empty:
+            return 0
+        return int(df['collection_interval'].sum())
 
-    def newsletter_query_get_playtime(self, start_time: datetime, end_time: datetime):
+    def newsletter_query_get_playtime(self, df: pd.DataFrame):
         # Return a list of all games from both steam_game_activity and discord_game_activity with total playtime in the given range.
-        connection = sqlite3.connect(DB_PATH)
-        cursor = connection.cursor()
-        cursor.execute('''
-            SELECT game_name, SUM(collection_interval) as total_playtime
-            FROM (
-                SELECT game_name, collection_interval
-                FROM steam_game_activity
-                WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
-                UNION ALL
-                SELECT game_name, collection_interval
-                FROM discord_game_activity
-                WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
-            )
-            GROUP BY game_name
-            ORDER BY total_playtime DESC
-        ''', (int(start_time.timestamp()), int(end_time.timestamp()), int(start_time.timestamp()), int(end_time.timestamp())))
-        result = cursor.fetchall()
-        connection.close()
-        return result
+        if df.empty:
+            return []
+        playtime = df.groupby('game_name')['collection_interval'].sum().reset_index()
+        playtime = playtime.rename(columns={'collection_interval': 'total_playtime'})
+        playtime = playtime.sort_values(by='total_playtime', ascending=False)
+        return list(playtime[['game_name', 'total_playtime']].itertuples(index=False, name=None))
 
-    def newsletter_query_get_biggest_groups(self, start_time: datetime, end_time: datetime):
+    def newsletter_query_get_biggest_groups(self, df: pd.DataFrame):
         # Return a list of all games by largest concurrent players in the given range from both steam_game_activity and discord_game_activity.
-        connection = sqlite3.connect(DB_PATH)
-        cursor = connection.cursor()
-        cursor.execute('''
-            SELECT game_name, COUNT(DISTINCT user_id) AS player_count
-            FROM (
-                SELECT timestamp, game_name, steam_id AS user_id
-                FROM steam_game_activity
-                WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
-                UNION ALL
-                SELECT timestamp, game_name, discord_id AS user_id
-                FROM discord_game_activity
-                WHERE timestamp BETWEEN ? AND ? AND collection_interval IS NOT NULL
-            )
-            GROUP BY game_name, timestamp
-            ORDER BY player_count DESC
-        ''', (int(start_time.timestamp()), int(end_time.timestamp()), int(start_time.timestamp()), int(end_time.timestamp())))
-        result = cursor.fetchall()
-        connection.close()
-        return result
+        if df.empty:
+            return []
+        groups = df.groupby(['timestamp', 'game_name'])['user_name'].nunique().reset_index()
+        groups = groups.rename(columns={'user_name': 'player_count'})
+        groups = groups.sort_values(by='player_count', ascending=False)
+        return list(groups[['game_name', 'player_count']].itertuples(index=False, name=None))
         
-    def newsletter_query_get_longest_sessions(self, start_time: datetime, end_time: datetime):
+    def newsletter_query_get_longest_sessions(self, df: pd.DataFrame):
         # Return a set of all games by longest single session in the given range from both steam_game_activity and discord_game_activity.
-        game_activity = self.query_get_game_activity_sessions(start_time, end_time)
+        game_activity = self.process_game_activity_sessions(df)
+        if game_activity.empty:
+             return pd.DataFrame(columns=["game_name","user_name","source", "duration_seconds"])
         grouped = game_activity.groupby(["game_name","user_name","source"])["duration_seconds"].max().reset_index()
         sorted_grouped = grouped.sort_values(by="duration_seconds", ascending=False)
         return sorted_grouped
@@ -760,7 +559,7 @@ class Database:
         connection.close()
         return result[0] if result and result[0] is not None else None
 
-def seconds_to_human_readable(total_seconds: int):
+def seconds_to_human_readable(total_seconds: int|float):
     """
     Konvertiert eine Anzahl von Sekunden in ein menschenlesbares Format.
     :param total_seconds:
@@ -768,6 +567,8 @@ def seconds_to_human_readable(total_seconds: int):
     """
     if not total_seconds:
         return "0 Minuten"
+    total_seconds = int(total_seconds)
+    total_seconds = abs(total_seconds)
     days = total_seconds // (24 * 3600)
     hours = (total_seconds % (24 * 3600)) // 3600
     minutes = (total_seconds % 3600) // 60

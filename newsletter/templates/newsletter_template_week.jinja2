@@ -6,25 +6,30 @@ Hier ist der Gnag Newsletter für KW {{title_period.calendar_week}}.
 {% if voice.total.current and voice.total.current > 0 %}
     {% if voice.total.change.percentage %}
         {% set total_trend = '↗️' if voice.total.change.percentage > 0 else ('↘️' if voice.total.change.percentage < 0 else '➡️') %}
-        Insgesamt wurden **{{ voice.total.current | seconds_to_human_readable }}** Lebenszeit in Discord verbracht. ({{ total_trend }} {{ voice.total.change.percentage | round(1) }}% zu voriger Woche)
+        Insgesamt wurden **{{ voice.total.current | seconds_to_human_readable }}** Lebenszeit in Discord verbracht.
+        ({{ total_trend }} {{ voice.total.change.percentage | round(1) }}% zu voriger Woche. Das sind {{ voice.total.change.absolute | seconds_to_human_readable }} unterschied.)
     {% else %}
         Keine Voice-Aktivität im aktuellen Zeitraum.
     {% endif %}
 {% endif %}
 
 {% if voice.together.current and voice.together.current > 0 %}
+    ### Gemeinsam statt einsam
     {% if voice.together.change.percentage %}
         {% set together_trend = '↗️' if voice.together.change.percentage > 0 else ('↘️' if voice.together.change.percentage < 0 else '➡️') %}
-        **{{ voice.together.current | seconds_to_human_readable }}** der Woche wurde im Discord zusammen verbracht. ({{ together_trend }} {{ voice.together.change.percentage | round(1) }}% zu voriger Woche)
+        **{{ voice.together.current | seconds_to_human_readable }}** der Woche wurde im Discord zusammen verbracht.
+        ({{ together_trend }} {{ voice.together.change.percentage | round(1) }}% zu voriger Woche. Das sind {{ voice.together.change.absolute | seconds_to_human_readable }} unterschied.)
     {% else %}
         **{{ voice.together.current | seconds_to_human_readable }}** der Woche wurde im Discord zusammen verbracht.
     {% endif %}
 {% endif %}
 
 {% if voice.alone.current and voice.alone.current > 0 %}
+    ### Der einsame Wolf
     {% if voice.alone.change.percentage %}
         {% set alone_trend = '↗️' if voice.alone.change.percentage > 0 else ('↘️' if voice.alone.change.percentage < 0 else '➡️') %}
-        Für ganze **{{ voice.alone.current | seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel. ({{ alone_trend }} {{ voice.alone.change.percentage | round(1) }}% zu voriger Woche)
+        Für ganze **{{ voice.alone.current | seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel.
+        ({{ alone_trend }} {{ voice.alone.change.percentage | round(1) }}% zu voriger Woche. Das sind {{ voice.alone.change.absolute | seconds_to_human_readable }} unterschied.)
     {% else %}
         Für ganze **{{ voice.alone.current | seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel.
     {% endif %}
@@ -34,7 +39,8 @@ Hier ist der Gnag Newsletter für KW {{title_period.calendar_week}}.
 {% if gaming.total.current and gaming.total.current > 0 %}
     {% if gaming.total.change.percentage %}
         {% set gtotal_trend = '↗️' if gaming.total.change.percentage > 0 else ('↘️' if gaming.total.change.percentage < 0 else '➡️') %}
-        Zusammengerechnet hat die Gnag **{{ gaming.total.current | seconds_to_human_readable }}** gegamed. ({{ gtotal_trend }} {{ gaming.total.change.percentage | round(1) }}% zu voriger Woche)
+        Zusammengerechnet hat die Gnag **{{ gaming.total.current | seconds_to_human_readable }}** gegamed.
+        ({{ gtotal_trend }} {{ gaming.total.change.percentage | round(1) }}% zu voriger Woche. Das sind {{ gaming.total.change.absolute | seconds_to_human_readable }} unterschied.)
     {% else %}
         Zusammengerechnet hat die Gnag **{{ gaming.total.current | seconds_to_human_readable }}** gegamed.
     {% endif %}
@@ -47,7 +53,7 @@ Keine Gaming-Daten für den aktuellen Zeitraum.
     Das meistgespielte Spiel war **{{ gaming.most_playtime.entries[0].name }}** mit **{{ gaming.most_playtime.entries[0].current_value | seconds_to_human_readable }}**.
     {% if gaming.most_playtime.entries[0].change_rank %}
     {% set change_trend = '↗️' if gaming.most_playtime.entries[0].change_rank.percentage > 0 else ('↘️' if gaming.most_playtime.entries[0].change_rank.percentage < 0 else '➡️') %}
-    ({{ change_trend }} {{ gaming.most_playtime.entries[0].change_rank.percentage | round(1) }}% zum Top Game voriger Woche)
+    ({{ change_trend }} {{ gaming.most_playtime.entries[0].change_rank.percentage | round(1) }}% zu {{gaming.most_playtime.entries[0].past_rankholder}}, dem Top Game voriger Woche)
     {% endif %}
 {% endif %}
 
@@ -56,9 +62,9 @@ Keine Gaming-Daten für den aktuellen Zeitraum.
     Die größte Ansammlung gabs bei **{{ gaming.biggest_groups.entries[0].name }}** wo **{{ gaming.biggest_groups.entries[0].current_value }} Gamer** gleichzeitig gespielt haben.
     {% if gaming.biggest_groups.entries[0].change_rank.absolute %}
         {% if gaming.biggest_groups.entries[0].change_rank.absolute > 0 %}
-            (↗️ {{ gaming.biggest_groups.entries[0].change_rank.absolute }} mehr als die größte Gruppe letzte Woche)
+            (↗️ {{ gaming.biggest_groups.entries[0].change_rank.absolute }} mehr als die größte Gruppe in {{ gaming.biggest_groups.entries[0].past_rankholder }} letzte Woche)
             {% elif gaming.biggest_groups.entries[0].change_rank.absolute < 0 %}
-            (↘️ {{ gaming.biggest_groups.entries[0].change_rank.absolute | abs }} weniger als die größte Gruppe letzte Woche)
+            (↘️ {{ gaming.biggest_groups.entries[0].change_rank.absolute | abs }} weniger als die größte Gruppe in {{ gaming.biggest_groups.entries[0].past_rankholder }} letzte Woche)
             {% else %}
             (➡️ genauso viele wie letzte Woche)
         {% endif %}
@@ -73,9 +79,9 @@ Keine Gaming-Daten für den aktuellen Zeitraum.
         Die längste Session gabs von **{{ longest_session.user_name }}** in **{{ longest_session.game_name }}**.
         Ganze **{{ longest_session.current_value | seconds_to_human_readable }}** wurden am Stück gezockt!
         {% if longest_session.change_rank.absolute < 0 %}
-            (↘️ {{ longest_session.change_rank.absolute | seconds_to_human_readable }} weniger als die längste Session letzte Woche)
+            (↘️ {{ longest_session.change_rank.absolute | seconds_to_human_readable }} weniger als die längste Session von {{ longest_session.past_rankholder }} in {{ longest_session.past_rankholder_game }} letzte Woche)
         {% elif longest_session.change_rank.absolute > 0 %}
-            (↗️ {{ longest_session.change_rank.absolute | seconds_to_human_readable }} mehr als die längste Session letzte Woche)
+            (↗️ {{ longest_session.change_rank.absolute | seconds_to_human_readable }} mehr als die längste Session von {{ longest_session.past_rankholder }} in {{ longest_session.past_rankholder_game }} letzte Woche)
         {% endif %}
     {% endif %}
 {% endif %}

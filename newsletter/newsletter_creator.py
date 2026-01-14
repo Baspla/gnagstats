@@ -167,6 +167,7 @@ def calculate_game_session_statistics(current_df:pd.DataFrame, past_df:pd.DataFr
             "source": row.get("source", "Unknown"),
             "rank": rank,
             "past_rankholder": past_df.iloc[rank - 1]["user_name"] if rank - 1 < len(past_df) else None,
+            "past_rankholder_game": past_df.iloc[rank - 1]["game_name"] if rank - 1 < len(past_df) else None,
             "current_value": current_value,
             "change_rank": {
                 "absolute": absolute_change_rank,
@@ -199,15 +200,20 @@ def query_value(fun,past_start,past_end,current_start,current_end):
     past = fun(past_start,past_end)
     return calculate_statistics(current,past)
 
-def query_list(fun,past_start,past_end,current_start,current_end):
-    current = fun(current_start,current_end)
-    past = fun(past_start,past_end)
-    return calculate_list_statistics(current,past)
+def query_value_df(fun, past_df, current_df):
+    current = fun(current_df)
+    past = fun(past_df)
+    return calculate_statistics(current, past)
 
-def query_game_sessions(fun,past_start,past_end,current_start,current_end,key):
-    current = fun(current_start,current_end)
-    past = fun(past_start,past_end)
-    return calculate_game_session_statistics(current,past,key)
+def query_list_df(fun, past_df, current_df):
+    current = fun(current_df)
+    past = fun(past_df)
+    return calculate_list_statistics(current, past)
+
+def query_game_sessions_df(fun, past_df, current_df, key):
+    current = fun(current_df)
+    past = fun(past_df)
+    return calculate_game_session_statistics(current, past, key)
 
 class NewsletterCreator:
     def __init__(self, current_event_fetcher: CurrentEventFetcher, database: Database):
@@ -221,13 +227,16 @@ class NewsletterCreator:
         
         voice_together = query_value(self.db.newsletter_query_get_voice_together,past_start,past_end,current_start,current_end)
         
-        gaming_total = query_value(self.db.newsletter_query_get_gaming_total,past_start,past_end,current_start,current_end)
-        
-        most_playtime = query_list(self.db.newsletter_query_get_playtime,past_start,past_end,current_start,current_end)
-        
-        biggest_groups = query_list(self.db.newsletter_query_get_biggest_groups,past_start,past_end,current_start,current_end)
+        past_game_df = self.db.query_get_game_activity_dataframe(past_start, past_end)
+        current_game_df = self.db.query_get_game_activity_dataframe(current_start, current_end)
 
-        longest_sessions = query_game_sessions(self.db.newsletter_query_get_longest_sessions,past_start,past_end,current_start,current_end,"duration_seconds")
+        gaming_total = query_value_df(self.db.newsletter_query_get_gaming_total,past_game_df,current_game_df)
+        
+        most_playtime = query_list_df(self.db.newsletter_query_get_playtime,past_game_df,current_game_df)
+        
+        biggest_groups = query_list_df(self.db.newsletter_query_get_biggest_groups,past_game_df,current_game_df)
+
+        longest_sessions = query_game_sessions_df(self.db.newsletter_query_get_longest_sessions,past_game_df,current_game_df,"duration_seconds")
         
         link = f"{BASE_URL}"
 
@@ -316,7 +325,11 @@ class NewsletterCreator:
         template = env.get_template('newsletter_template_week.jinja2')
 
         data = self.prepare_template_data(past_start=previous_week_start,past_end=previous_week_end,current_start=week_start,current_end=week_end,future_start=dt.now(),future_end=future)
-
+        # write data to file for debugging
+        filename = f"newsletter_week_{year}_{calendar_week}.json"
+        with open(filename, "w", encoding="utf-8") as f:
+            import json
+            json.dump(data, f, ensure_ascii=False, indent=4, default=str)
         post_to_discord(template,data)
 
     def create_yearly_newsletter(self,year:int):

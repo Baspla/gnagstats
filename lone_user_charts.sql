@@ -1,0 +1,1 @@
+SELECT va.discord_id, SUM(va.collection_interval)/60.0/60.0 AS t FROM discord_voice_activity AS va LEFT JOIN discord_voice_channels AS vc ON va.channel_name = vc.channel_name AND va.timestamp = vc.timestamp WHERE vc.user_count = 1 GROUP BY va.discord_id ORDER BY t DESC

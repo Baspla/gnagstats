@@ -7,7 +7,8 @@ Hier ist der Gnag Newsletter für {{ title_period.month }}.
 
 	{% if voice.total.change.percentage %}
         {% set total_trend = '↗️' if voice.total.change.percentage > 0 else ('↘️' if voice.total.change.percentage < 0 else '➡️') %}
-        Insgesamt wurden **{{ voice.total.current | seconds_to_human_readable }}** Lebenszeit in Discord verbracht. ({{ total_trend }} {{ voice.total.change.percentage | round(1) }}% zum vorigen Monat)
+        Insgesamt wurden **{{ voice.total.current | seconds_to_human_readable }}** Lebenszeit in Discord verbracht. 
+        ({{ total_trend }} {{ voice.total.change.percentage | round(1) }}% zum vorigen Monat)
     {% else %}
         Insgesamt wurden **{{ voice.total.current | seconds_to_human_readable }}** Lebenszeit in Discord verbracht.
     {% endif %}
@@ -18,7 +19,8 @@ Keine Voice-Aktivität im aktuellen Monat.
 {% if voice.together.current and voice.together.current > 0 %}
     {% if voice.together.change.percentage %}
         {% set together_trend = '↗️' if voice.together.change.percentage > 0 else ('↘️' if voice.together.change.percentage < 0 else '➡️') %}
-        **{{ voice.together.current | seconds_to_human_readable }}** des Monats wurde im Discord zusammen verbracht. ({{ together_trend }} {{ voice.together.change.percentage | round(1) }}% zum vorigen Monat)
+        **{{ voice.together.current | seconds_to_human_readable }}** des Monats wurde im Discord zusammen verbracht.
+        ({{ together_trend }} {{ voice.together.change.percentage | round(1) }}% zum vorigen Monat)
     {% else %}
         **{{ voice.together.current | seconds_to_human_readable }}** des Monats wurde im Discord zusammen verbracht.
     {% endif %}
@@ -27,7 +29,8 @@ Keine Voice-Aktivität im aktuellen Monat.
 {% if voice.alone.current and voice.alone.current > 0 %}
     {% if voice.alone.change.percentage %}
         {% set alone_trend = '↗️' if voice.alone.change.percentage > 0 else ('↘️' if voice.alone.change.percentage < 0 else '➡️') %}
-        Für ganze **{{ voice.alone.current | seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel. ({{ alone_trend }} {{ voice.alone.change.percentage | round(1) }}% zum vorigen Monat)
+        Für ganze **{{ voice.alone.current | seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel.
+        ({{ alone_trend }} {{ voice.alone.change.percentage | round(1) }}% zum vorigen Monat)
     {% else %}
         Für ganze **{{ voice.alone.current | seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel.
     {% endif %}
@@ -37,7 +40,8 @@ Keine Voice-Aktivität im aktuellen Monat.
 {% if gaming.total.current and gaming.total.current > 0 %}
     {% if gaming.total.change.percentage %}
         {% set gtotal_trend = '↗️' if gaming.total.change.percentage > 0 else ('↘️' if gaming.total.change.percentage < 0 else '➡️') %}
-        Zusammengerechnet hat die Gnag **{{ gaming.total.current | seconds_to_human_readable }}** gegamed. ({{ gtotal_trend }} {{ gaming.total.change.percentage | round(1) }}% zum vorigen Monat)
+        Zusammengerechnet hat die Gnag **{{ gaming.total.current | seconds_to_human_readable }}** gegamed.
+        ({{ gtotal_trend }} {{ gaming.total.change.percentage | round(1) }}% zum vorigen Monat)
     {% else %}
         Zusammengerechnet hat die Gnag **{{ gaming.total.current | seconds_to_human_readable }}** gegamed.
     {% endif %}
@@ -48,7 +52,8 @@ Keine Gaming-Daten für den aktuellen Monat.
 {% if gaming.most_playtime and gaming.most_playtime.entries and gaming.most_playtime.entries|length > 0 %}
     ### Timesink
     {% for e in gaming.most_playtime.entries[:5] %}
-        {{ e.rank }}. **{{ e.name }}** - {{ e.current_value | seconds_to_human_readable }}{% if e.change_this %} ({{ '↗️' if e.change_this.percentage > 0 else ('↘️' if e.change_this.percentage < 0 else '➡️') }} {{ e.change_this.percentage | round(1) }}% zum vorigen Monat){% endif %}<nop>
+        {{ e.rank }}. **{{ e.name }}** - {{ e.current_value | seconds_to_human_readable }}
+        {% if e.change_this %} ({{ '↗️' if e.change_this.percentage > 0 else ('↘️' if e.change_this.percentage < 0 else '➡️') }} {{ e.change_this.percentage | round(1) }}% zum vorigen Monat){% endif %}<nop>
     {% endfor %}
 {% endif %}
 
@@ -68,7 +73,8 @@ Die größte Ansammlung gabs bei **{{ gaming.biggest_groups.entries[0].name }}**
     ### In den Bann gezogen
     {% for e in gaming.longest_sessions.entries[:5] %}
         {% if e.current_value >= 3600 %}
-            {{ e.rank }}. **{{ e.user_name }}** in **{{ e.game_name }}** - {{ e.current_value | seconds_to_human_readable }}{% if e.change_rank and e.change_rank.absolute != 0 %} ({{ '↗️' if e.change_rank.absolute > 0 else '↘️' }} {{ e.change_rank.absolute | abs | seconds_to_human_readable }}){% endif %}<nop>
+            {{ e.rank }}. **{{ e.user_name }}** in **{{ e.game_name }}** - {{ e.current_value | seconds_to_human_readable }}
+            {% if e.change_rank and e.change_rank.absolute != 0 %} ({{ '↗️' if e.change_rank.absolute > 0 else '↘️' }} {{ e.change_rank.absolute | abs | seconds_to_human_readable }}){% endif %}<nop>
         {% endif %}
     {% endfor %}
 {% endif %}

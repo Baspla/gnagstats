@@ -15,7 +15,7 @@ from collection.collector import DataCollector
 from config import LOGGING_LEVEL, DISCORD_API_TOKEN, DISCORD_STATS_ENABLED, LOGGING_LEVEL_DISCORD, STEAM_API_KEY, DATA_COLLECTION_INTERVAL, \
     DEBUG_MODE, PORT, HOST
 from collection.current_events import CurrentEventFetcher
-from data_storage.db import Database
+from data_storage.db import Database, seconds_to_human_readable
 from discord_bot import DiscordClient
 from data_storage.json_data import  get_data
 from newsletter.newsletter_creator import NewsletterCreator
@@ -144,14 +144,19 @@ async def main():
     collector = DataCollector(data, discord_client, database,steam)
     current_event_fetcher = CurrentEventFetcher(discord_client, data,steam)
     newsletter_creator = NewsletterCreator(current_event_fetcher,database)
-    coreloop = create_task(core_loop(collector,newsletter_creator))
-    
     if DEBUG_MODE:
+        logging.debug(f"39600.0 is {seconds_to_human_readable(39600.0)} and -17700.0 is {seconds_to_human_readable(-17700.0)}")
         logging.info("Debug mode is enabled. Waiting 10 seconds before publishing test newsletter.")
         time.sleep(10)
         day_last_week = dt.now() - datetime.timedelta(days=7)
+        day_last_2week = dt.now() - datetime.timedelta(days=14)
         last_month = dt.now().month - 1 if dt.now().month > 1 else 12
         year = dt.now().year if dt.now().month > 1 else dt.now().year - 1   
+        try:
+            newsletter_creator.create_weekly_newsletter(day_last_2week.isocalendar())
+        except Exception as e:
+            logging.error(f"Error creating weekly newsletter: {e}")
+            logging.exception("Stack trace:")
         try:
             newsletter_creator.create_weekly_newsletter(day_last_week.isocalendar())
         except Exception as e:
@@ -162,25 +167,26 @@ async def main():
             newsletter_creator.create_monthly_newsletter(year, last_month)
         except Exception as e:
             logging.error(f"Error creating monthly newsletter: {e}")
-            logging.exception("Stack trace:")
-        try:
-            newsletter_creator.create_yearly_newsletter(dt.now().year)
-        except Exception as e:
-            logging.error(f"Error creating yearly newsletter: {e}")
-            logging.exception("Stack trace:")
+        logging.exception("Stack trace:")
+        #try:
+        #    newsletter_creator.create_yearly_newsletter(dt.now().year)
+        #except Exception as e:
+        #    logging.error(f"Error creating yearly newsletter: {e}")
+        #    logging.exception("Stack trace:")
         
-
-    try:
-        if DISCORD_STATS_ENABLED:
-            await asyncio.gather(
-                discord_client.start(DISCORD_API_TOKEN),
-                coreloop
-            )
-        else:
-            logging.info("Discord stats collection is disabled, skipping Discord client start.")
-            await coreloop
-    except KeyboardInterrupt:
-        await discord_client.close()
+    else:
+        coreloop = create_task(core_loop(collector,newsletter_creator))
+        try:
+            if DISCORD_STATS_ENABLED:
+                await asyncio.gather(
+                    discord_client.start(DISCORD_API_TOKEN),
+                    coreloop
+                )
+            else:
+                logging.info("Discord stats collection is disabled, skipping Discord client start.")
+                await coreloop
+        except KeyboardInterrupt:
+            await discord_client.close()
 
 if __name__ == "__main__":
     try:
