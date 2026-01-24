@@ -1,4 +1,6 @@
 import asyncio
+import sys
+import subprocess
 from fileinput import filename
 from json import load
 import logging
@@ -19,8 +21,7 @@ from data_storage.db import Database, seconds_to_human_readable
 from discord_bot import DiscordClient
 from data_storage.json_data import  get_data
 from newsletter.newsletter_creator import NewsletterCreator
-from webserver.data_provider import DataProvider
-from webserver.wsgi import run_webserver
+from datavis.data_provider import DataProvider
 
 data = {
     "guild_ids": [],
@@ -133,8 +134,7 @@ async def main():
     database = Database()
     # Starte Webserver für Statistiken
     data_provider = DataProvider(database)
-    ws = run_webserver(data_provider, host=HOST, port=PORT)
-
+    ws = subprocess.Popen([sys.executable, "-m", "streamlit", "run", "datavis/app.py", "--server.port", str(PORT), "--server.address", HOST])
     data = get_data()
     intents = discord.Intents.default()
     intents.members = True
@@ -173,8 +173,7 @@ async def main():
         #    logging.error(f"Error creating yearly newsletter: {e}")
         #    logging.exception("Stack trace:")
         # wait for the webserver thread to finish (it won't in debug mode)
-        ws.join()
-        
+        ws.wait()
     else:
         coreloop = create_task(core_loop(collector,newsletter_creator))
         try:
@@ -188,6 +187,7 @@ async def main():
                 await coreloop
         except KeyboardInterrupt:
             await discord_client.close()
+            ws.terminate()
 
 if __name__ == "__main__":
     try:
