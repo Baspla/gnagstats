@@ -15,7 +15,7 @@ from data_storage.db import minutes_to_human_readable
 
 # Ziel-Zeitzone für Darstellung (automatische Umstellung Sommer/Winterzeit)
 LOCAL_TZ = pytz.timezone("Europe/Berlin")
-from webserver.data_provider import DataProvider, Params
+from datavis.data_provider import DataProvider, Params
 
 
 def _build_voice_activity_figure(df_voice_intervals: pd.DataFrame) -> go.Figure:
