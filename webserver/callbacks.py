@@ -122,7 +122,7 @@ def build_initial_figures(data_provider: DataProvider):
     -------
     dict: {'voice': go.Figure, 'game': go.Figure}
     """
-    now_ts = int(pd.Timestamp.now().timestamp())
+    now_ts = int(pd.Timestamp.now(tz=LOCAL_TZ).timestamp())
     params = Params(start=now_ts - 24 * 60 * 60, end=now_ts)
     bundle = data_provider.load_all(params)
     voice_fig = _build_voice_activity_figure(bundle.get("voice_intervals", pd.DataFrame()))

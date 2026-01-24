@@ -133,7 +133,7 @@ async def main():
     database = Database()
     # Starte Webserver für Statistiken
     data_provider = DataProvider(database)
-    run_webserver(data_provider, host=HOST, port=PORT)
+    ws = run_webserver(data_provider, host=HOST, port=PORT)
 
     data = get_data()
     intents = discord.Intents.default()
@@ -149,11 +149,10 @@ async def main():
         logging.info("Debug mode is enabled. Waiting 10 seconds before publishing test newsletter.")
         time.sleep(10)
         day_last_week = dt.now() - datetime.timedelta(days=7)
-        day_last_2week = dt.now() - datetime.timedelta(days=14)
         last_month = dt.now().month - 1 if dt.now().month > 1 else 12
         year = dt.now().year if dt.now().month > 1 else dt.now().year - 1   
         try:
-            newsletter_creator.create_weekly_newsletter(day_last_2week.isocalendar())
+            newsletter_creator.create_weekly_newsletter(dt.now().isocalendar())
         except Exception as e:
             logging.error(f"Error creating weekly newsletter: {e}")
             logging.exception("Stack trace:")
@@ -167,12 +166,14 @@ async def main():
             newsletter_creator.create_monthly_newsletter(year, last_month)
         except Exception as e:
             logging.error(f"Error creating monthly newsletter: {e}")
-        logging.exception("Stack trace:")
+            logging.exception("Stack trace:")
         #try:
         #    newsletter_creator.create_yearly_newsletter(dt.now().year)
         #except Exception as e:
         #    logging.error(f"Error creating yearly newsletter: {e}")
         #    logging.exception("Stack trace:")
+        # wait for the webserver thread to finish (it won't in debug mode)
+        ws.join()
         
     else:
         coreloop = create_task(core_loop(collector,newsletter_creator))

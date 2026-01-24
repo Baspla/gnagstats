@@ -326,10 +326,10 @@ class NewsletterCreator:
 
         data = self.prepare_template_data(past_start=previous_week_start,past_end=previous_week_end,current_start=week_start,current_end=week_end,future_start=dt.now(),future_end=future)
         # write data to file for debugging
-        filename = f"newsletter_week_{year}_{calendar_week}.json"
-        with open(filename, "w", encoding="utf-8") as f:
-            import json
-            json.dump(data, f, ensure_ascii=False, indent=4, default=str)
+        #filename = f"newsletter_week_{year}_{calendar_week}.json"
+        #with open(filename, "w", encoding="utf-8") as f:
+        #    import json
+        #    json.dump(data, f, ensure_ascii=False, indent=4, default=str)
         post_to_discord(template,data)
 
     def create_yearly_newsletter(self,year:int):
