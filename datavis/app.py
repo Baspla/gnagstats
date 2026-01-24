@@ -11,7 +11,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from datavis.data_provider import DataProvider
 from data_storage.db import Database
-from datavis.plots import build_initial_figures
+from datavis.plots import build_figures
 
 st.set_page_config(layout="wide", page_title="Gnag Stats Dashboard")
 
@@ -20,7 +20,7 @@ def get_global_data():
     db = Database()
     provider = DataProvider(db)
     
-    figures = build_initial_figures(provider)
+    figures = build_figures(provider)
     
     return figures, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 

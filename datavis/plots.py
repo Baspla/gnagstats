@@ -115,10 +115,8 @@ def _build_game_activity_figure(df_game_intervals: pd.DataFrame) -> go.Figure:
         return _empty_figure(f"Spielaktivität der letzten 24 Stunden (Fehler: {str(e)})")
 
 
-def build_initial_figures(data_provider: DataProvider):
-    """Berechnet beide 24h-Figuren einmalig.
-
-    Returns
+def build_figures(data_provider: DataProvider):
+    """Returns
     -------
     dict: {'voice': go.Figure, 'game': go.Figure}
     """
@@ -128,20 +126,3 @@ def build_initial_figures(data_provider: DataProvider):
     voice_fig = _build_voice_activity_figure(bundle.get("voice_intervals", pd.DataFrame()))
     game_fig = _build_game_activity_figure(bundle.get("game_intervals", pd.DataFrame()))
     return {"voice": voice_fig, "game": game_fig}
-
-
-def register_callbacks(app):
-    """Registriert Callbacks für die App (z.B. Page Refresh)."""
-    from dash import Input, Output
-    from dash.exceptions import PreventUpdate
-    
-    @app.callback(
-        Output('url', 'pathname'),
-        Input('interval-refresh', 'n_intervals')
-    )
-    def refresh_page(n):
-        """Löst eine Seitenaktualisierung aus, wenn das Interval feuert."""
-        if n is None or n == 0:
-            raise PreventUpdate
-        # Gibt den gleichen Pfad zurück, um die Seite neu zu laden
-        return '/'
