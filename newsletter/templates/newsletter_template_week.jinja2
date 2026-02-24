@@ -7,7 +7,7 @@ Hier ist der Gnag Newsletter für KW {{title_period.calendar_week}}.
     {% if voice.total.change.percentage %}
         {% set total_trend = '↗️' if voice.total.change.percentage > 0 else ('↘️' if voice.total.change.percentage < 0 else '➡️') %}
         Insgesamt wurden **{{ voice.total.current | seconds_to_human_readable }}** Lebenszeit in Discord verbracht.
-        ({{ total_trend }} {{ voice.total.change.percentage | round(1) }}% zu voriger Woche. Das sind {{ voice.total.change.absolute | seconds_to_human_readable }} unterschied.)
+        ({{ total_trend }} {{ voice.total.change.percentage | round(1) }}% zu voriger Woche. Das sind {{ voice.total.change.absolute | seconds_to_human_readable }} Unterschied.)
     {% else %}
         Keine Voice-Aktivität im aktuellen Zeitraum.
     {% endif %}
@@ -18,7 +18,7 @@ Hier ist der Gnag Newsletter für KW {{title_period.calendar_week}}.
     {% if voice.together.change.percentage %}
         {% set together_trend = '↗️' if voice.together.change.percentage > 0 else ('↘️' if voice.together.change.percentage < 0 else '➡️') %}
         **{{ voice.together.current | seconds_to_human_readable }}** der Woche wurde im Discord zusammen verbracht.
-        ({{ together_trend }} {{ voice.together.change.percentage | round(1) }}% zu voriger Woche. Das sind {{ voice.together.change.absolute | seconds_to_human_readable }} unterschied.)
+        ({{ together_trend }} {{ voice.together.change.percentage | round(1) }}% zu voriger Woche. Das sind {{ voice.together.change.absolute | seconds_to_human_readable }} Unterschied.)
     {% else %}
         **{{ voice.together.current | seconds_to_human_readable }}** der Woche wurde im Discord zusammen verbracht.
     {% endif %}
@@ -29,7 +29,7 @@ Hier ist der Gnag Newsletter für KW {{title_period.calendar_week}}.
     {% if voice.alone.change.percentage %}
         {% set alone_trend = '↗️' if voice.alone.change.percentage > 0 else ('↘️' if voice.alone.change.percentage < 0 else '➡️') %}
         Für ganze **{{ voice.alone.current | seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel.
-        ({{ alone_trend }} {{ voice.alone.change.percentage | round(1) }}% zu voriger Woche. Das sind {{ voice.alone.change.absolute | seconds_to_human_readable }} unterschied.)
+        ({{ alone_trend }} {{ voice.alone.change.percentage | round(1) }}% zu voriger Woche. Das sind {{ voice.alone.change.absolute | seconds_to_human_readable }} Unterschied.)
     {% else %}
         Für ganze **{{ voice.alone.current | seconds_to_human_readable }}** saß jemand alleine in einem Voice Channel.
     {% endif %}
@@ -40,7 +40,7 @@ Hier ist der Gnag Newsletter für KW {{title_period.calendar_week}}.
     {% if gaming.total.change.percentage %}
         {% set gtotal_trend = '↗️' if gaming.total.change.percentage > 0 else ('↘️' if gaming.total.change.percentage < 0 else '➡️') %}
         Zusammengerechnet hat die Gnag **{{ gaming.total.current | seconds_to_human_readable }}** gegamed.
-        ({{ gtotal_trend }} {{ gaming.total.change.percentage | round(1) }}% zu voriger Woche. Das sind {{ gaming.total.change.absolute | seconds_to_human_readable }} unterschied.)
+        ({{ gtotal_trend }} {{ gaming.total.change.percentage | round(1) }}% zu voriger Woche. Das sind {{ gaming.total.change.absolute | seconds_to_human_readable }} Unterschied.)
     {% else %}
         Zusammengerechnet hat die Gnag **{{ gaming.total.current | seconds_to_human_readable }}** gegamed.
     {% endif %}
