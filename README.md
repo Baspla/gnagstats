@@ -34,6 +34,18 @@ $env:WEB_FIGURE_REFRESH_MINUTES=10; python main.py
 Der Refresh erfolgt vollständig serverseitig; Browser-Clients müssen die Seite nur neu laden,
 um die aktualisierten Daten zu sehen. Ein expliziter Client-Polling-Mechanismus ist nicht nötig.
 
+### JSON-API für zuletzt gespielte Spiele
+
+Der Prozess startet zusätzlich einen kleinen Flask-Webserver auf `WEB_SERVER_PORT` (Standard: `8080`).
+Der Endpunkt `GET /api/recent` liefert ein JSON-Objekt mit den zuletzt in den letzten 30 Tagen
+gespielten Spielen pro Nutzer, zum Beispiel:
+
+```json
+{"userid":["Game A","Game B"],"userid2":["Game C"]}
+```
+
+Wenn du den Port ändern willst, setze `WEB_SERVER_PORT` in der Umgebung.
+
 ## Useful Commands
 
 ### Update Requirements

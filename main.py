@@ -1,6 +1,7 @@
 import asyncio
 import sys
 import subprocess
+from threading import Thread
 from fileinput import filename
 from json import load
 import logging
@@ -15,12 +16,13 @@ from steam_web_api import Steam
 
 from collection.collector import DataCollector
 from config import LOGGING_LEVEL, DISCORD_API_TOKEN, DISCORD_STATS_ENABLED, LOGGING_LEVEL_DISCORD, STEAM_API_KEY, DATA_COLLECTION_INTERVAL, \
-    DEBUG_MODE, PORT, HOST
+    DEBUG_MODE, PORT, HOST, WEB_SERVER_PORT
 from collection.current_events import CurrentEventFetcher
 from data_storage.db import Database, seconds_to_human_readable
 from discord_bot import DiscordClient
 from data_storage.json_data import  get_data
 from newsletter.newsletter_creator import NewsletterCreator
+from datavis.api import create_app
 from datavis.data_provider import DataProvider
 
 data = {
@@ -134,6 +136,13 @@ async def main():
     database = Database()
     # Starte Webserver für Statistiken
     data_provider = DataProvider(database)
+    api_app = create_app()
+    api_thread = Thread(
+        target=api_app.run,
+        kwargs={"host": HOST, "port": WEB_SERVER_PORT, "debug": False, "use_reloader": False},
+        daemon=True,
+    )
+    api_thread.start()
     ws = subprocess.Popen([sys.executable, "-m", "streamlit", "run", "datavis/app.py", "--server.port", str(PORT), "--server.address", HOST])
     data = get_data()
     intents = discord.Intents.default()

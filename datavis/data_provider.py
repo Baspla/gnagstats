@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 import logging
+from datetime import datetime, timedelta
 from typing import Dict, Tuple
 import pandas as pd
 import uuid
@@ -310,3 +311,52 @@ class DataProvider:
             'game_raw': df_game_merged,
             'game_intervals': df_game_intervals,
         }
+
+    def recent_games_by_user(self, days: int = 30) -> Dict[str, list[str]]:
+        """Return distinct games played per user in the last ``days`` days.
+
+        The result is keyed by user id and sorted by each game's most recent
+        activity first.
+        """
+        end_dt = datetime.now()
+        start_dt = end_dt - timedelta(days=days)
+        start_ts = int(start_dt.timestamp())
+        end_ts = int(end_dt.timestamp())
+
+        steam_rows = self._query_steam_game_activity(start_ts, end_ts)
+        discord_rows = self._query_discord_game_activity(start_ts, end_ts)
+        if steam_rows.empty and discord_rows.empty:
+            return {}
+
+        combined = pd.concat(
+            [
+                steam_rows[["timestamp", "user_id", "game_name"]] if not steam_rows.empty else pd.DataFrame(columns=["timestamp", "user_id", "game_name"]),
+                discord_rows[["timestamp", "user_id", "game_name"]] if not discord_rows.empty else pd.DataFrame(columns=["timestamp", "user_id", "game_name"]),
+            ],
+            ignore_index=True,
+        )
+
+        if combined.empty:
+            return {}
+
+        combined = combined.dropna(subset=["user_id", "game_name", "timestamp"])
+        if combined.empty:
+            return {}
+
+        combined["user_id"] = combined["user_id"].astype(str)
+        combined["game_name"] = combined["game_name"].astype(str)
+        combined["timestamp"] = pd.to_numeric(combined["timestamp"], errors="coerce")
+        combined = combined.dropna(subset=["timestamp"])
+        if combined.empty:
+            return {}
+
+        latest = (
+            combined.groupby(["user_id", "game_name"], as_index=False)["timestamp"]
+            .max()
+            .sort_values(["user_id", "timestamp", "game_name"], ascending=[True, False, True])
+        )
+
+        result: Dict[str, list[str]] = {}
+        for user_id, group in latest.groupby("user_id", sort=True):
+            result[user_id] = group["game_name"].tolist()
+        return result
