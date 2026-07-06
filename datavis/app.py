@@ -38,13 +38,13 @@ def main():
 
         st.header("Yap Yap Yap")
         if voice_fig:
-            st.plotly_chart(voice_fig, use_container_width=True)
+            st.plotly_chart(voice_fig, width=True)
         else:
             st.warning("No voice activity data available.")
 
         st.header("The Gaming")
         if game_fig:
-            st.plotly_chart(game_fig, use_container_width=True)
+            st.plotly_chart(game_fig, width=True)
         else:
             st.warning("No game activity data available.")
             

@@ -350,13 +350,13 @@ class DataProvider:
         if combined.empty:
             return {}
 
-        latest = (
-            combined.groupby(["user_id", "game_name"], as_index=False)["timestamp"]
-            .max()
-            .sort_values(["user_id", "timestamp", "game_name"], ascending=[True, False, True])
-        )
+        latest = combined.groupby(["user_id", "game_name"], as_index=False).agg(timestamp=("timestamp", "max"))
+        latest["_sort_key"] = list(zip(latest["user_id"], -latest["timestamp"], latest["game_name"]))
+        latest = latest.sort_values(by="_sort_key")
+        latest = latest.drop(columns=["_sort_key"])
 
         result: Dict[str, list[str]] = {}
         for user_id, group in latest.groupby("user_id", sort=True):
-            result[user_id] = group["game_name"].tolist()
+            user_key = str(user_id)
+            result[user_key] = group["game_name"].tolist()
         return result

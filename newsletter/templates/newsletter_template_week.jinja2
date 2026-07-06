@@ -48,6 +48,14 @@ Hier ist der Gnag Newsletter für KW {{title_period.calendar_week}}.
 Keine Gaming-Daten für den aktuellen Zeitraum.
 {% endif %}
 
+{% if gaming.new_games and gaming.new_games.count > 0 %}
+    ### Neue Spiele
+    Diese Woche wurden **{{ gaming.new_games.count }}** neue Spiele zum ersten Mal überhaupt in der Geschichte der Gnag gespielt!
+    {% if gaming.new_games.count <= 5 %}
+        (Das waren: {{ gaming.new_games.names | join(', ') }})
+    {% endif %}
+{% endif %}
+
 {% if gaming.most_playtime and gaming.most_playtime.entries and gaming.most_playtime.entries|length > 0 %}
     ### Timesink
     Das meistgespielte Spiel war **{{ gaming.most_playtime.entries[0].name }}** mit **{{ gaming.most_playtime.entries[0].current_value | seconds_to_human_readable }}**.

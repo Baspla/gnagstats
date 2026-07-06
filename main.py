@@ -182,6 +182,7 @@ async def main():
         #    logging.error(f"Error creating yearly newsletter: {e}")
         #    logging.exception("Stack trace:")
         # wait for the webserver thread to finish (it won't in debug mode)
+        await collector.collect_steam_data()
         ws.wait()
     else:
         coreloop = create_task(core_loop(collector,newsletter_creator))

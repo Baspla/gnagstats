@@ -14,7 +14,11 @@ locale.setlocale(locale.LC_TIME, "de_DE.UTF-8")
 
 
 def post_to_discord(template: Template, data: dict):
-    rendered = template.render(data)
+    try:
+        rendered = template.render(data)
+    except Exception as e:
+        logging.exception(f"Error rendering newsletter template: {e}")
+        return
     rendered = rendered.replace("\n", "\\n")
     rendered = rendered.replace('\t', '\\t')
     logging.debug("Rendered newsletter content:")
@@ -220,24 +224,24 @@ class NewsletterCreator:
         self.current_event_fetcher = current_event_fetcher
         self.db = database
         
-    def prepare_template_data(self,past_start:dt, past_end:dt, current_start:dt, current_end:dt, future_start:dt, future_end:dt) -> dict:
-        voice_total = query_value(self.db.newsletter_query_get_voice_total,past_start,past_end,current_start,current_end)
-
-        voice_alone = query_value(self.db.newsletter_query_get_voice_alone,past_start,past_end,current_start,current_end)
-        
-        voice_together = query_value(self.db.newsletter_query_get_voice_together,past_start,past_end,current_start,current_end)
+    def prepare_template_data(self, past_start: dt, past_end: dt, current_start: dt, current_end: dt, future_start: dt, future_end: dt) -> dict:
+        voice_total = query_value(self.db.newsletter_query_get_voice_total, past_start, past_end, current_start, current_end)
+        voice_alone = query_value(self.db.newsletter_query_get_voice_alone, past_start, past_end, current_start, current_end)
+        voice_together = query_value(self.db.newsletter_query_get_voice_together, past_start, past_end, current_start, current_end)
         
         past_game_df = self.db.query_get_game_activity_dataframe(past_start, past_end)
         current_game_df = self.db.query_get_game_activity_dataframe(current_start, current_end)
 
-        gaming_total = query_value_df(self.db.newsletter_query_get_gaming_total,past_game_df,current_game_df)
+        gaming_total = query_value_df(self.db.newsletter_query_get_gaming_total, past_game_df, current_game_df)
+        most_playtime = query_list_df(self.db.newsletter_query_get_playtime, past_game_df, current_game_df)
+        biggest_groups = query_list_df(self.db.newsletter_query_get_biggest_groups, past_game_df, current_game_df)
+        longest_sessions = query_game_sessions_df(self.db.newsletter_query_get_longest_sessions, past_game_df, current_game_df, "duration_seconds")
         
-        most_playtime = query_list_df(self.db.newsletter_query_get_playtime,past_game_df,current_game_df)
-        
-        biggest_groups = query_list_df(self.db.newsletter_query_get_biggest_groups,past_game_df,current_game_df)
+        # --- NEW CODE START ---
+        # Fetch games that appear for the first time in the current period
+        new_games_list = self.db.newsletter_query_get_new_games(current_start, current_end)
+        # --- NEW CODE END ---
 
-        longest_sessions = query_game_sessions_df(self.db.newsletter_query_get_longest_sessions,past_game_df,current_game_df,"duration_seconds")
-        
         link = f"{BASE_URL}"
 
         data = {
@@ -276,6 +280,10 @@ class NewsletterCreator:
                 "most_playtime": most_playtime,
                 "biggest_groups": biggest_groups,
                 "longest_sessions": longest_sessions,
+                "new_games": {
+                    "count": len(new_games_list) if new_games_list else 0,
+                    "names": new_games_list if new_games_list else []
+                }
             },
         }
         return data

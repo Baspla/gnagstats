@@ -304,6 +304,42 @@ class Database:
         sorted_grouped = grouped.sort_values(by="duration_seconds", ascending=False)
         return sorted_grouped
 
+    def newsletter_query_get_new_games(self, current_start: datetime, current_end: datetime) -> list:
+        """
+        Returns a list of game names that were recorded for the very first time 
+        in the history of the database during the given timeframe.
+        """
+        start_ts = int(current_start.timestamp())
+        end_ts = int(current_end.timestamp())
+
+        connection = sqlite3.connect(DB_PATH)
+        cursor = connection.cursor()
+        
+        # We union both game activity tables, group by game name to find the 
+        # absolute minimum timestamp (first time played), and check if that 
+        # timestamp falls in the current period.
+        cursor.execute('''
+            SELECT game_name
+            FROM (
+                SELECT game_name, MIN(timestamp) as min_ts
+                FROM (
+                    SELECT game_name, timestamp FROM discord_game_activity
+                    UNION ALL
+                    SELECT game_name, timestamp FROM steam_game_activity
+                )
+                WHERE game_name IS NOT NULL AND game_name != '?' AND game_name != ''
+                GROUP BY game_name
+            )
+            WHERE min_ts >= ? AND min_ts <= ?
+            ORDER BY min_ts ASC
+        ''', (start_ts, end_ts))
+        
+        results = cursor.fetchall()
+        connection.close()
+        
+        # Flatten the list of tuples into a simple list of strings
+        return [row[0] for row in results]
+
     #
     # Web queries (separate from newsletter queries)
     #

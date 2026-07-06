@@ -49,6 +49,14 @@ Keine Voice-Aktivität im aktuellen Monat.
 Keine Gaming-Daten für den aktuellen Monat.
 {% endif %}
 
+{% if gaming.new_games and gaming.new_games.count > 0 %}
+    ### Neue Spiele
+    Diesen Monat haben wir **{{ gaming.new_games.count }}** Spiele gezockt, die wir noch nie zuvor gespielt haben!
+    {% if gaming.new_games.count <= 10 %}
+        (Unter anderem: {{ gaming.new_games.names | join(', ') }})
+    {% endif %}
+{% endif %}
+
 {% if gaming.most_playtime and gaming.most_playtime.entries and gaming.most_playtime.entries|length > 0 %}
     ### Timesink
     {% for e in gaming.most_playtime.entries[:5] %}
