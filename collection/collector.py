@@ -49,12 +49,14 @@ class DataCollector:
                 # Separater Loop für Aktivitätstracking aller getrackten Nutzer (unabhängig von Voice-Channel)
                 for member in guild.members:
                     if str(member.id) in self.data["user_discord_ids"]:
-                        if member.activity:
-                            if member.activity.type == ActivityType.playing:
-                                logging.debug(f"User {member.name} discord activity details: {member.activity}")
-                                self.db.insert_discord_game_activity(timestamp, str(member.id), str(member.activity.name))
-                            else:
-                                logging.debug(f"User {member.name} activity is not of type 'playing': {member.activity.type}")
+                        if member.activities:
+                            logging.debug(f"User {member.name} has {len(member.activities)} activities.")
+                            for activity in member.activities:
+                                if activity.type == ActivityType.playing:
+                                    logging.debug(f"User {member.name} discord activity details: {activity}")
+                                    self.db.insert_discord_game_activity(timestamp, str(member.id), str(activity.name))
+                                else:
+                                    logging.debug(f"User {member.name} activity is not of type 'playing': {activity.type}")
         pass
 
     async def collect_steam_data(self):

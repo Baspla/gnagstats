@@ -100,7 +100,7 @@ async def check_and_publish_newsletter(now, interval_minutes, last_weekly_newsle
 
 async def core_loop(collector, newsletter_creator):
     logging.info("Starting core loop...")
-    # await asyncio.sleep(DATA_COLLECTION_INTERVAL)
+    await asyncio.sleep(10)  # Initial delay to allow other components to start
     last_weekly_newsletter_day = None
     last_monthly_newsletter_day = None
     interval_minutes = DATA_COLLECTION_INTERVAL // 60
@@ -156,33 +156,33 @@ async def main():
     if DEBUG_MODE:
         logging.debug(f"39600.0 is {seconds_to_human_readable(39600.0)} and -17700.0 is {seconds_to_human_readable(-17700.0)}")
         logging.info("Debug mode is enabled. Waiting 10 seconds before publishing test newsletter.")
-        time.sleep(10)
-        day_last_week = dt.now() - datetime.timedelta(days=7)
-        last_month = dt.now().month - 1 if dt.now().month > 1 else 12
-        year = dt.now().year if dt.now().month > 1 else dt.now().year - 1   
-        try:
-            newsletter_creator.create_weekly_newsletter(dt.now().isocalendar())
-        except Exception as e:
-            logging.error(f"Error creating weekly newsletter: {e}")
-            logging.exception("Stack trace:")
-        try:
-            newsletter_creator.create_weekly_newsletter(day_last_week.isocalendar())
-        except Exception as e:
-            logging.error(f"Error creating weekly newsletter: {e}")
-            logging.exception("Stack trace:")
+        #time.sleep(10)
+        #day_last_week = dt.now() - datetime.timedelta(days=7)
+        #last_month = dt.now().month - 1 if dt.now().month > 1 else 12
+        #year = dt.now().year if dt.now().month > 1 else dt.now().year - 1   
+        #try:
+        #    newsletter_creator.create_weekly_newsletter(dt.now().isocalendar())
+        #except Exception as e:
+        #    logging.error(f"Error creating weekly newsletter: {e}")
+        #    logging.exception("Stack trace:")
+        #try:
+        #    newsletter_creator.create_weekly_newsletter(day_last_week.isocalendar())
+        #except Exception as e:
+        #    logging.error(f"Error creating weekly newsletter: {e}")
+        #    logging.exception("Stack trace:")
         
-        try:
-            newsletter_creator.create_monthly_newsletter(year, last_month)
-        except Exception as e:
-            logging.error(f"Error creating monthly newsletter: {e}")
-            logging.exception("Stack trace:")
+        #try:
+        #    newsletter_creator.create_monthly_newsletter(year, last_month)
+        #except Exception as e:
+        #    logging.error(f"Error creating monthly newsletter: {e}")
+       #    logging.exception("Stack trace:")
         #try:
         #    newsletter_creator.create_yearly_newsletter(dt.now().year)
         #except Exception as e:
         #    logging.error(f"Error creating yearly newsletter: {e}")
         #    logging.exception("Stack trace:")
         # wait for the webserver thread to finish (it won't in debug mode)
-        await collector.collect_steam_data()
+        # await collector.collect_steam_data()
         ws.wait()
     else:
         coreloop = create_task(core_loop(collector,newsletter_creator))
