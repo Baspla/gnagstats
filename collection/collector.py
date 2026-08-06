@@ -37,7 +37,17 @@ class DataCollector:
                         if str(member.id) in self.data["user_discord_ids"]:  # Nur Eingetragene Leute tracken
                             tracked_users += 1
                             logging.debug(f"Tracking user {member.name} (ID: {member.id}) in channel {channel.name}.")
-                            self.db.insert_discord_voice_activity(timestamp,str(member.id), channel.name, str(guild.id))
+                            voice = member.voice
+                            self.db.insert_discord_voice_activity(
+                                timestamp,
+                                str(member.id),
+                                channel.name,
+                                str(guild.id),
+                                voice.self_deaf if voice else False,
+                                voice.self_mute if voice else False,
+                                voice.self_stream if voice else False,
+                                voice.self_video if voice else False,
+                            )
                             logging.debug(f"User {member.name} is playing {member.activity if member.activity else 'No Activity'}")
                     if user_count > 0:
                         self.db.insert_discord_voice_channel(timestamp,

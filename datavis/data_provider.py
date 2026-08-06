@@ -64,8 +64,10 @@ class DataProvider:
     def _query_discord_voice_activity(self,start: int | None, end: int | None) -> pd.DataFrame:
         rows = self.db.get_discord_voice_activity(start, end)
         df = (
-            pd.DataFrame(rows, columns=["timestamp", "discord_id", "channel_name", "guild_id", "collection_interval"]) if rows
-            else pd.DataFrame(columns=["timestamp", "discord_id", "channel_name", "guild_id", "collection_interval", 
+            pd.DataFrame(rows, columns=["timestamp", "discord_id", "channel_name", "guild_id", "collection_interval",
+                                        "self_deaf", "self_mute", "self_stream", "self_video"]) if rows
+            else pd.DataFrame(columns=["timestamp", "discord_id", "channel_name", "guild_id", "collection_interval",
+                                       "self_deaf", "self_mute", "self_stream", "self_video",
                                        "minutes_per_snapshot","timestamp_dt","user_id","user_name"])
         )
         if not df.empty:

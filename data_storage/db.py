@@ -23,8 +23,12 @@ class Database:
                 timestamp INTEGER,
                 discord_id TEXT,
                 channel_name TEXT,
-                guild_id TEXT
-                    ,collection_interval INTEGER DEFAULT NULL
+                guild_id TEXT,
+                collection_interval INTEGER DEFAULT NULL,
+                self_deaf INTEGER DEFAULT 0,
+                self_mute INTEGER DEFAULT 0,
+                self_stream INTEGER DEFAULT 0,
+                self_video INTEGER DEFAULT 0
             )
         ''')
         cursor.execute('''
@@ -71,15 +75,15 @@ class Database:
         connection.close()
         logging.debug(f"Inserted Discord voice channel data: {channel_name}, {guild_id}, {user_count}, {tracked_users}, Interval: {DATA_COLLECTION_INTERVAL}")
 
-    def insert_discord_voice_activity(self, timestamp: float, discord_id: str, channel_name: str, guild_id: str):
+    def insert_discord_voice_activity(self, timestamp: float, discord_id: str, channel_name: str, guild_id: str, self_deaf: bool = False, self_mute: bool = False, self_stream: bool = False, self_video: bool = False):
         connection = sqlite3.connect(DB_PATH)
         cursor = connection.cursor()
         cursor.execute('''
-            INSERT INTO discord_voice_activity (timestamp, discord_id, channel_name, guild_id, collection_interval)
-            VALUES (?, ?, ?, ?, ?)''', (timestamp, discord_id, channel_name, guild_id, DATA_COLLECTION_INTERVAL))
+            INSERT INTO discord_voice_activity (timestamp, discord_id, channel_name, guild_id, collection_interval, self_deaf, self_mute, self_stream, self_video)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (timestamp, discord_id, channel_name, guild_id, DATA_COLLECTION_INTERVAL, int(self_deaf), int(self_mute), int(self_stream), int(self_video)))
         connection.commit()
         connection.close()
-        logging.debug(f"Inserted Discord voice activity data: {discord_id}, {channel_name}, {guild_id}, Interval: {DATA_COLLECTION_INTERVAL}")
+        logging.debug(f"Inserted Discord voice activity data: {discord_id}, {channel_name}, {guild_id}, Interval: {DATA_COLLECTION_INTERVAL}, deaf={self_deaf}, mute={self_mute}, stream={self_stream}, video={self_video}")
 
     def insert_discord_game_activity(self, timestamp: float, discord_id: str, game_name: str):
         connection = sqlite3.connect(DB_PATH)
@@ -405,7 +409,8 @@ class Database:
     def get_discord_voice_activity(self, start_time: int | None = None, end_time: int | None = None):
         """
         Return raw discord voice activity rows for the web app.
-        Each row contains: timestamp, discord_id, channel_name, guild_id, collection_interval.
+        Each row contains: timestamp, discord_id, channel_name, guild_id, collection_interval,
+        self_deaf, self_mute, self_stream, self_video.
         Optional start/end timestamps (epoch seconds) can limit the range.
         """
         if isinstance(start_time, datetime):
@@ -419,7 +424,8 @@ class Database:
         if start_time is not None and end_time is not None:
             cursor.execute(
                 """
-                SELECT timestamp, discord_id, channel_name, guild_id, collection_interval
+                SELECT timestamp, discord_id, channel_name, guild_id, collection_interval,
+                       self_deaf, self_mute, self_stream, self_video
                 FROM discord_voice_activity
                 WHERE timestamp BETWEEN ? AND ?
                 ORDER BY timestamp ASC
@@ -429,7 +435,8 @@ class Database:
         elif start_time is not None:
             cursor.execute(
                 """
-                SELECT timestamp, discord_id, channel_name, guild_id, collection_interval
+                SELECT timestamp, discord_id, channel_name, guild_id, collection_interval,
+                       self_deaf, self_mute, self_stream, self_video
                 FROM discord_voice_activity
                 WHERE timestamp >= ?
                 ORDER BY timestamp ASC
@@ -439,7 +446,8 @@ class Database:
         elif end_time is not None:
             cursor.execute(
                 """
-                SELECT timestamp, discord_id, channel_name, guild_id, collection_interval
+                SELECT timestamp, discord_id, channel_name, guild_id, collection_interval,
+                       self_deaf, self_mute, self_stream, self_video
                 FROM discord_voice_activity
                 WHERE timestamp <= ?
                 ORDER BY timestamp ASC
@@ -449,7 +457,8 @@ class Database:
         else:
             cursor.execute(
                 """
-                SELECT timestamp, discord_id, channel_name, guild_id, collection_interval
+                SELECT timestamp, discord_id, channel_name, guild_id, collection_interval,
+                       self_deaf, self_mute, self_stream, self_video
                 FROM discord_voice_activity
                 ORDER BY timestamp ASC
                 """
