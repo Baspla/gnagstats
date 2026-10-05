@@ -619,3 +619,97 @@ class DataProvider:
                 ]
 
         return result
+
+    def get_user_stats_alltime(self) -> Dict[str, dict]:
+        """Return all-time per-user statistics.
+
+        Returns a dict keyed by user display name, each containing:
+          - voice_hours   (float) – total hours in voice channels (all time)
+          - game_hours    (float) – total playtime (all time)
+          - mute_hours    (float) – hours with self_mute=1
+          - deaf_hours    (float) – hours with self_deaf=1
+          - stream_hours  (float) – hours with self_stream=1
+          - video_hours   (float) – hours with self_video=1
+        """
+        now = datetime.now()
+        end_ts = int(now.timestamp())
+
+        # --- game intervals (all time) ---
+        df_steam = self._query_steam_game_activity(0, end_ts)
+        df_discord_game = self._query_discord_game_activity(0, end_ts)
+        df_game_merged = self._compute_game_activity(df_steam, df_discord_game)
+        df_game_intervals = self._compute_game_activity_intervals(df_game_merged)
+
+        # --- voice intervals (all time) ---
+        df_voice_raw = self._query_discord_voice_activity(0, end_ts)
+        df_voice_intervals = self._compute_voice_activity_intervals(df_voice_raw)
+
+        # --- collect known user names ---
+        known_names: set[str] = set()
+        if isinstance(self.json_data, dict):
+            for u in get_user_data(self.json_data):
+                if name := u.get("name"):
+                    known_names.add(name)
+        for df in (df_game_intervals, df_voice_intervals):
+            if not df.empty and "user_name" in df.columns:
+                known_names.update(str(v) for v in df["user_name"].unique() if pd.notna(v))
+        known_names.discard("")
+        known_names.discard("?")
+        known_names.discard("nan")
+        known_names.discard("None")
+
+        # --- build result skeleton ---
+        result: Dict[str, dict] = {}
+        for name in sorted(known_names, key=str.casefold):
+            result[name] = {
+                "voice_hours": 0.0,
+                "game_hours": 0.0,
+                "mute_hours": 0.0,
+                "deaf_hours": 0.0,
+                "stream_hours": 0.0,
+                "video_hours": 0.0,
+            }
+
+        # --- aggregate game hours (all time) ---
+        if not df_game_intervals.empty:
+            game_totals = (
+                df_game_intervals.groupby("user_name")["duration_hours"]
+                .sum()
+                .to_dict()
+            )
+            for uname, hours in game_totals.items():
+                user_name = str(uname)
+                if user_name in result:
+                    result[user_name]["game_hours"] = round(float(hours), 2)
+
+        # --- aggregate voice hours (all time) ---
+        if not df_voice_intervals.empty:
+            voice_totals = (
+                df_voice_intervals.groupby("user_name")["duration_hours"]
+                .sum()
+                .to_dict()
+            )
+            for uname, hours in voice_totals.items():
+                user_name = str(uname)
+                if user_name in result:
+                    result[user_name]["voice_hours"] = round(float(hours), 2)
+
+        # --- aggregate flag-based times from raw voice data ---
+        if not df_voice_raw.empty and "user_name" in df_voice_raw.columns:
+            ci = df_voice_raw["collection_interval"].fillna(300)
+            for flag_col, result_key in [
+                ("self_mute", "mute_hours"),
+                ("self_deaf", "deaf_hours"),
+                ("self_stream", "stream_hours"),
+                ("self_video", "video_hours"),
+            ]:
+                flag_df = df_voice_raw[df_voice_raw[flag_col] == 1].copy()
+                if not flag_df.empty:
+                    flag_df["_ci"] = ci[flag_df.index]
+                    total_secs = flag_df.groupby("user_name")["_ci"].sum().to_dict()
+                    for uname, secs in total_secs.items():
+                        user_name = str(uname)
+                        if user_name in result:
+                            result[user_name][result_key] = round(float(secs) / 3600.0, 2)
+
+        return result

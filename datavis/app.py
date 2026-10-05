@@ -22,14 +22,15 @@ def get_global_data():
     
     figures = build_figures(provider)
     user_stats = provider.get_user_stats_7d()
+    alltime_stats = provider.get_user_stats_alltime()
     
-    return figures, user_stats, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return figures, user_stats, alltime_stats, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def main():
     try:
         st_autorefresh(interval=5 * 60 * 1000, key="data_refresher")
         
-        figures, user_stats, last_updated = get_global_data()
+        figures, user_stats, alltime_stats, last_updated = get_global_data()
         
         st.title(f"Gnag Stats Dashboard")
         
@@ -102,6 +103,21 @@ def main():
                         st.dataframe(table_rows, use_container_width=True, hide_index=True)
                     else:
                         st.info("Keine Spiele in den letzten 7 Tagen.")
+
+                    # ──── All‑time statistics ───────────────────────────────────
+                    st.subheader("Some of the stats of all time")
+                    at = alltime_stats.get(name, {})
+                    ca, cb, cc = st.columns(3)
+                    with ca:
+                        st.metric("Sprechzeit (gesamt)", f"{at.get('voice_hours', 0):.2f} Stunden")
+                        st.metric("Spielzeit (gesamt)", f"{at.get('game_hours', 0):.2f} Stunden")
+                    with cb:
+                        st.metric("Zeit gemutet",          f"{at.get('mute_hours', 0):.2f} Stunden")
+                        st.metric("Zeit deafened",           f"{at.get('deaf_hours', 0):.2f} Stunden")
+                    with cc:
+                        st.metric("Zeit gestreamt",         f"{at.get('stream_hours', 0):.2f} Stunden")
+                        st.metric("Zeit mit Kamera",          f"{at.get('video_hours', 0):.2f} Stunden")
+
         else:
             st.info("Keine Benutzerstatistiken verfügbar.")
             
