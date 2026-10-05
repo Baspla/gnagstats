@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Tuple
+from typing import Dict, Tuple, cast
 import pandas as pd
 import uuid
 import math
@@ -426,8 +426,9 @@ class DataProvider:
                 .to_dict()
             )
             for uname, hours in game_totals.items():
-                if uname in result:
-                    result[uname]["game_hours"] = round(float(hours), 2)
+                user_name = str(uname)
+                if user_name in result:
+                    result[user_name]["game_hours"] = round(float(hours), 2)
 
         # ---- aggregate 7‑day voice hours ----
         if not df_voice_intervals.empty:
@@ -437,8 +438,9 @@ class DataProvider:
                 .to_dict()
             )
             for uname, hours in voice_totals.items():
-                if uname in result:
-                    result[uname]["voice_hours"] = round(float(hours), 2)
+                user_name = str(uname)
+                if user_name in result:
+                    result[user_name]["voice_hours"] = round(float(hours), 2)
 
         # ---- daily aggregates YTD (for calendar heatmaps) ----
         year_start_ts = int(datetime(now.year, 1, 1).timestamp())
@@ -458,9 +460,12 @@ class DataProvider:
             daily_game = df_game_intervals_ytd.groupby(
                 ["user_name", "date"]
             )["duration_minutes"].sum()
-            for (uname, date_str), mins in daily_game.items():
-                if uname in result:
-                    result[uname]["daily_game_minutes"][date_str] = round(float(mins), 1)
+            for key, mins in daily_game.items():
+                uname, date_str = cast(tuple[object, object], key)
+                user_name = str(uname)
+                date_key = str(date_str)
+                if user_name in result:
+                    result[user_name]["daily_game_minutes"][date_key] = round(float(mins), 1)
 
         if not df_voice_intervals_ytd.empty:
             df_voice_intervals_ytd["date"] = pd.to_datetime(
@@ -469,9 +474,12 @@ class DataProvider:
             daily_voice = df_voice_intervals_ytd.groupby(
                 ["user_name", "date"]
             )["duration_minutes"].sum()
-            for (uname, date_str), mins in daily_voice.items():
-                if uname in result:
-                    result[uname]["daily_voice_minutes"][date_str] = round(float(mins), 1)
+            for key, mins in daily_voice.items():
+                uname, date_str = cast(tuple[object, object], key)
+                user_name = str(uname)
+                date_key = str(date_str)
+                if user_name in result:
+                    result[user_name]["daily_voice_minutes"][date_key] = round(float(mins), 1)
 
         # ---- per‑game list: no time limit, top ``game_limit`` per user ----
         df_steam_all = self._query_steam_game_activity(0, end_ts)
