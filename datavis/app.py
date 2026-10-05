@@ -82,6 +82,22 @@ def main():
                     )
                     st.plotly_chart(voice_fig, use_container_width=True)
 
+                    # ──── All‑time statistics ───────────────────────────────────
+                    st.markdown("##### Some of the stats of all time")
+                    at = alltime_stats.get(name, {})
+                    ca, cb, cc = st.columns(3)
+                    with ca:
+                        st.metric("Sprechzeit (gesamt)", f"{at.get('voice_hours', 0):.2f} Stunden")
+                        st.metric("Spielzeit (gesamt)", f"{at.get('game_hours', 0):.2f} Stunden")
+                    with cb:
+                        st.metric("Zeit gemutet",          f"{at.get('mute_hours', 0):.2f} Stunden")
+                        st.metric("Zeit deafened",           f"{at.get('deaf_hours', 0):.2f} Stunden")
+                    with cc:
+                        st.metric("Zeit gestreamt",         f"{at.get('stream_hours', 0):.2f} Stunden")
+                        st.metric("Zeit mit Kamera",          f"{at.get('video_hours', 0):.2f} Stunden")
+
+                    
+                    st.markdown("##### Die zuletzt gespielten Spiele")
                     games = stats["games"]
                     if games:
                         now_ts = int(datetime.datetime.now().timestamp())
@@ -102,22 +118,7 @@ def main():
                             })
                         st.dataframe(table_rows, use_container_width=True, hide_index=True)
                     else:
-                        st.info("Keine Spiele in den letzten 7 Tagen.")
-
-                    # ──── All‑time statistics ───────────────────────────────────
-                    st.subheader("Some of the stats of all time")
-                    at = alltime_stats.get(name, {})
-                    ca, cb, cc = st.columns(3)
-                    with ca:
-                        st.metric("Sprechzeit (gesamt)", f"{at.get('voice_hours', 0):.2f} Stunden")
-                        st.metric("Spielzeit (gesamt)", f"{at.get('game_hours', 0):.2f} Stunden")
-                    with cb:
-                        st.metric("Zeit gemutet",          f"{at.get('mute_hours', 0):.2f} Stunden")
-                        st.metric("Zeit deafened",           f"{at.get('deaf_hours', 0):.2f} Stunden")
-                    with cc:
-                        st.metric("Zeit gestreamt",         f"{at.get('stream_hours', 0):.2f} Stunden")
-                        st.metric("Zeit mit Kamera",          f"{at.get('video_hours', 0):.2f} Stunden")
-
+                        st.info("Keine Spiele gespielt.")
         else:
             st.info("Keine Benutzerstatistiken verfügbar.")
             
