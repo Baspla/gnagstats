@@ -6,6 +6,8 @@ im Layout gesetzt. Falls die Daten später doch dynamisch werden sollen,
 kann man erneut einen Callback hinzufügen, der die Build-Funktionen aufruft.
 """
 
+from typing import Dict
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -113,6 +115,132 @@ def _build_game_activity_figure(df_game_intervals: pd.DataFrame) -> go.Figure:
         return fig
     except Exception as e:  # pragma: no cover
         return _empty_figure(f"Spielaktivität der letzten 24 Stunden (Fehler: {str(e)})")
+
+
+def build_calendar_heatmap(
+    daily_minutes: Dict[str, float],
+    year: int,
+    title: str,
+    colorscale: str = "Greens",
+) -> go.Figure:
+    """Build a calendar heatmap (year–to–today) from a dict of daily minutes.
+
+    X‑axis = weeks (with month labels), Y‑axis = day of week (Mo‑So).
+
+    Parameters
+    ----------
+    daily_minutes : dict mapping ``"YYYY-MM-DD"`` → minutes.
+    year : calendar year (e.g. 2026).
+    title : figure title.
+    colorscale : any Plotly colorscale, e.g. ``"Greens"`` or ``"Blues"``.
+
+    Returns
+    -------
+    go.Figure
+    """
+    from datetime import date, timedelta
+    from typing import Dict, List, Optional
+
+    today = date.today()
+    start = date(year, 1, 1)
+    
+    # Cap the calendar at today's date to remove empty future weeks
+    if year == today.year:
+        actual_end = today
+    elif year > today.year:
+        actual_end = start
+    else:
+        actual_end = date(year, 12, 31)
+
+    # Find the first Monday to align the grid
+    first_monday = start - timedelta(days=start.weekday())
+    last_sunday = actual_end + timedelta(days=(6 - actual_end.weekday()))
+
+    # Calculate total weeks up to the actual end date
+    total_weeks = (last_sunday - first_monday).days // 7
+    if (last_sunday - first_monday).days % 7 != 0 or total_weeks == 0:
+        total_weeks += 1
+
+    # Grid: z[weekday][week_index] — 7 rows x total_weeks columns
+    z: List[List[Optional[float]]] = [[None] * total_weeks for _ in range(7)]
+    z_text: List[List[str]] = [[""] * total_weeks for _ in range(7)]
+
+    current = first_monday
+    for w in range(total_weeks):
+        for d in range(7):
+            date_str = current.strftime("%Y-%m-%d")
+            if start <= current <= actual_end:
+                val = daily_minutes.get(date_str, 0)
+                if val > 0:
+                    z[d][w] = val
+                    z_text[d][w] = f"Date: {date_str}<br>Value: {val:.1f} min"
+                else:
+                    # None macht die Zelle komplett transparent
+                    z[d][w] = None  
+                    z_text[d][w] = f"Date: {date_str}<br>No activity"
+            else:
+                z[d][w] = None 
+            current += timedelta(days=1)
+
+    day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    
+    # Use abbreviated month names to prevent overlapping
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    # Calculate X-axis ticks for the first week of each month
+    tickvals = []
+    ticktext = []
+    current_date = first_monday
+    prev_month = 0
+    for w in range(total_weeks):
+        thu = current_date + timedelta(days=3)
+        m = thu.month
+        if m != prev_month:
+            tickvals.append(w)
+            ticktext.append(month_names[m-1])
+            prev_month = m
+        current_date += timedelta(days=7)
+
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=z,
+            y=day_labels,
+            colorscale=colorscale,
+            xgap=2, ygap=2,  
+            text=z_text,
+            hoverongaps=True, # Wichtig: Erlaubt Tooltips auf transparenten (None) Zellen
+            hovertemplate="%{text}<extra></extra>",
+            showscale=True,
+            colorbar=dict(title="Minutes"),
+        )
+    )
+
+    fig.update_layout(
+        title=title,
+        yaxis=dict(
+            autorange="reversed", 
+            showticklabels=True,
+            showgrid=False,
+            zeroline=False
+        ),
+        xaxis=dict(
+            tickmode="array",
+            tickvals=tickvals,
+            ticktext=ticktext,
+            showgrid=False,
+            zeroline=False,
+            side="bottom",
+            tickangle=0
+        ),
+        # Beide Hintergründe auf komplett transparent setzen
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=50, r=50, t=60, b=40),
+        height=250,
+        font=dict(size=10),
+    )
+    return fig
 
 
 def build_figures(data_provider: DataProvider):

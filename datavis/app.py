@@ -11,7 +11,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from datavis.data_provider import DataProvider
 from data_storage.db import Database
-from datavis.plots import build_figures
+from datavis.plots import build_figures, build_calendar_heatmap
 
 st.set_page_config(layout="wide", page_title="Gnag Stats Dashboard")
 
@@ -21,14 +21,15 @@ def get_global_data():
     provider = DataProvider(db)
     
     figures = build_figures(provider)
+    user_stats = provider.get_user_stats_7d()
     
-    return figures, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return figures, user_stats, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def main():
     try:
         st_autorefresh(interval=5 * 60 * 1000, key="data_refresher")
         
-        figures, last_updated = get_global_data()
+        figures, user_stats, last_updated = get_global_data()
         
         st.title(f"Gnag Stats Dashboard")
         
@@ -47,6 +48,60 @@ def main():
             st.plotly_chart(game_fig, width="stretch")
         else:
             st.warning("No game activity data available.")
+
+        # ──── Benutzerspezifische Statistiken (Tabs) ────────────────
+        st.subheader("Leude Leude Leude")
+        if user_stats:
+            user_names = list(user_stats.keys())
+            tabs = st.tabs(user_names)
+            for idx, name in enumerate(user_names):
+                with tabs[idx]:
+                    stats = user_stats[name]
+                    k1, k2 = st.columns(2)
+                    with k1:
+                        st.metric("Spielzeit (7 Tage)", f"{stats['game_hours']:.2f}")
+                    with k2:
+                        st.metric("Sprechzeit (7 Tage)", f"{stats['voice_hours']:.2f}")
+                        
+                    year_now = datetime.datetime.now().year
+                    game_fig = build_calendar_heatmap(
+                        stats.get("daily_game_minutes", {}),
+                        year_now,
+                        "Spielzeit (täglich)",
+                        "Greens",
+                    )
+                    st.plotly_chart(game_fig, use_container_width=True)
+                    voice_fig = build_calendar_heatmap(
+                        stats.get("daily_voice_minutes", {}),
+                        year_now,
+                        "Sprechzeit (täglich)",
+                        "Blues",
+                    )
+                    st.plotly_chart(voice_fig, use_container_width=True)
+
+                    games = stats["games"]
+                    if games:
+                        now_ts = int(datetime.datetime.now().timestamp())
+                        table_rows = []
+                        for g in games:
+                            secs_ago = now_ts - g["last_played_ts"]
+                            hrs_ago = secs_ago / 3600
+                            if hrs_ago < 1:
+                                ago_label = "<1 Std."
+                            elif hrs_ago < 24:
+                                ago_label = f"vor {int(hrs_ago)} Std."
+                            else:
+                                days_ago = hrs_ago / 24
+                                ago_label = f"vor {int(days_ago)} Tagen"
+                            table_rows.append({
+                                "Spiel": g["game_name"],
+                                "Zuletzt gespielt": ago_label,
+                            })
+                        st.dataframe(table_rows, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Keine Spiele in den letzten 7 Tagen.")
+        else:
+            st.info("Keine Benutzerstatistiken verfügbar.")
             
     except Exception as e:
         st.error(f"An error occurred: {e}")
