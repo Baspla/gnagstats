@@ -122,6 +122,7 @@ def build_calendar_heatmap(
     year: int,
     title: str,
     colorscale: str = "Greens",
+    daily_top_games: Dict[str, str] | None = None,
 ) -> go.Figure:
     """Build a calendar heatmap (year–to–today) from a dict of daily minutes.
 
@@ -133,6 +134,8 @@ def build_calendar_heatmap(
     year : calendar year (e.g. 2026).
     title : figure title.
     colorscale : any Plotly colorscale, e.g. ``"Greens"`` or ``"Blues"``.
+    daily_top_games : optional mapping of ``"YYYY-MM-DD"`` to the game
+        with the most played minutes on that day.
 
     Returns
     -------
@@ -176,7 +179,12 @@ def build_calendar_heatmap(
                     z[d][w] = hours
                     hours_text = f"{hours:.1f}".replace(".", ",")
                     formatted_date = current.strftime("%d.%m.%Y")
-                    z_text[d][w] = f"Datum: {formatted_date}<br>Dauer: {hours_text} Stunden"
+                    top_game = (daily_top_games or {}).get(date_str)
+                    top_game_text = f"<br>Top-Spiel: {top_game}" if top_game else ""
+                    z_text[d][w] = (
+                        f"Datum: {formatted_date}<br>Dauer: {hours_text} Stunden"
+                        f"{top_game_text}"
+                    )
                 else:
                     # None macht die Zelle komplett transparent
                     z[d][w] = None  

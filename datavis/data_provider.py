@@ -340,6 +340,56 @@ class DataProvider:
             totals[key] = sum(b - a for a, b in merged) / 60.0
         return totals
     
+    def _aggregate_game_calendar_minutes_by_game(
+        self,
+        game_intervals: pd.DataFrame,
+        start_ts: int,
+        end_ts: int,
+    ) -> Dict[Tuple[str, str], Dict[str, float]]:
+        """Aggregate played minutes per user, local date, and game."""
+        if game_intervals.empty:
+            return {}
+
+        local_tz = ZoneInfo("Europe/Berlin")
+        pieces: Dict[tuple[str, str, str], list[tuple[float, float]]] = {}
+        for row in game_intervals.itertuples(index=False):
+            user_name = str(getattr(row, "user_name", ""))
+            game_name = str(getattr(row, "game_name", ""))
+            try:
+                interval_start = max(float(row.start_ts), float(start_ts))
+                interval_end = min(float(row.end_ts), float(end_ts))
+            except (TypeError, ValueError):
+                continue
+            if not user_name or not game_name or interval_end <= interval_start:
+                continue
+
+            current_ts = interval_start
+            while current_ts < interval_end:
+                current_dt = datetime.fromtimestamp(current_ts, tz=local_tz)
+                next_midnight = datetime.combine(
+                    current_dt.date() + timedelta(days=1),
+                    datetime.min.time(),
+                    tzinfo=local_tz,
+                )
+                piece_end = min(interval_end, next_midnight.timestamp())
+                key = (user_name, current_dt.date().isoformat(), game_name)
+                pieces.setdefault(key, []).append((current_ts, piece_end))
+                current_ts = piece_end
+
+        totals: Dict[tuple[str, str], Dict[str, float]] = {}
+        for (user_name, date_str, game_name), intervals in pieces.items():
+            intervals.sort()
+            merged: list[list[float]] = []
+            for interval_start, interval_end in intervals:
+                if merged and interval_start <= merged[-1][1]:
+                    merged[-1][1] = max(merged[-1][1], interval_end)
+                else:
+                    merged.append([interval_start, interval_end])
+            totals.setdefault((user_name, date_str), {})[game_name] = (
+                sum(end - start for start, end in merged) / 60.0
+            )
+        return totals
+
     def _query_first_timestamp(self) -> int | None:
         return self.db.web_query_get_first_timestamp()
 
@@ -477,7 +527,8 @@ class DataProvider:
         result: Dict[str, dict] = {}
         for name in sorted(known_names, key=str.casefold):
             result[name] = {"voice_hours": 0.0, "game_hours": 0.0, "games": [],
-                            "daily_game_minutes": {}, "daily_voice_minutes": {}}
+                            "daily_game_minutes": {}, "daily_top_games": {},
+                            "daily_voice_minutes": {}}
 
         # ---- aggregate 7‑day game hours ----
         if not df_game_intervals.empty:
@@ -521,6 +572,16 @@ class DataProvider:
             user_name, date_str = key
             if user_name in result:
                 result[user_name]["daily_game_minutes"][date_str] = round(float(mins), 1)
+
+        # ---- top game per local calendar day (for the game heatmap hover) ----
+        if not df_game_intervals_ytd.empty:
+            daily_game_by_game = self._aggregate_game_calendar_minutes_by_game(
+                df_game_intervals_ytd, year_start_ts, end_ts
+            )
+            for (user_name, date_str), games in daily_game_by_game.items():
+                if user_name in result and games:
+                    top_game = max(games.items(), key=lambda item: (item[1], item[0]))[0]
+                    result[user_name]["daily_top_games"][date_str] = str(top_game)
 
         if not df_voice_intervals_ytd.empty:
             df_voice_intervals_ytd["date"] = pd.to_datetime(

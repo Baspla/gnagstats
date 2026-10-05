@@ -50,18 +50,19 @@ def main():
             st.warning("No game activity data available.")
 
         # ──── Benutzerspezifische Statistiken (Tabs) ────────────────
-        st.subheader("Leude Leude Leude")
+        st.header("Leude Leude Leude")
         if user_stats:
             user_names = list(user_stats.keys())
             tabs = st.tabs(user_names)
             for idx, name in enumerate(user_names):
                 with tabs[idx]:
+                    st.subheader(f"{name}s Stats")
                     stats = user_stats[name]
                     k1, k2 = st.columns(2)
                     with k1:
-                        st.metric("Spielzeit (7 Tage)", f"{stats['game_hours']:.2f}")
+                        st.metric("Spielzeit (7 Tage)", f"{stats['game_hours']:.2f} Stunden")
                     with k2:
-                        st.metric("Sprechzeit (7 Tage)", f"{stats['voice_hours']:.2f}")
+                        st.metric("Sprechzeit (7 Tage)", f"{stats['voice_hours']:.2f} Stunden")
                         
                     year_now = datetime.datetime.now().year
                     game_fig = build_calendar_heatmap(
@@ -69,6 +70,7 @@ def main():
                         year_now,
                         "Spielzeit (täglich)",
                         "Greens",
+                        stats.get("daily_top_games", {}),
                     )
                     st.plotly_chart(game_fig, use_container_width=True)
                     voice_fig = build_calendar_heatmap(
