@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Tuple
+from typing import Dict, Tuple, cast
 import pandas as pd
 import uuid
 import math
@@ -14,6 +14,7 @@ from data_storage.json_data import (
     get_user_id_to_name_map,
     get_steam_id_to_user_id_map,
     get_discord_id_to_user_id_map,
+    get_user_data,
     load_json_data
 )
 
@@ -361,4 +362,144 @@ class DataProvider:
         for user_id, group in latest.groupby("user_id", sort=True):
             user_key = str(user_id)
             result[user_key] = group["game_name"].tolist()
+        return result
+
+    def get_user_stats_7d(self, game_limit: int = 10) -> Dict[str, dict]:
+        """Return per-user statistics.
+
+        The totals (voice_hours, game_hours) cover the last 7 days.
+        The per-game list shows the most recent ``game_limit`` games
+        without a time restriction.
+        The ``daily_game_minutes``/``daily_voice_minutes`` dicts contain
+        *all* activity from Jan 1 of the current year up to now, keyed
+        by ``YYYY-MM-DD`` – intended for calendar heatmaps.
+
+        Returns a dict keyed by user display name, each containing:
+          - voice_hours        (float) – hours in voice channels (7d)
+          - game_hours         (float) – total playtime across all games (7d)
+          - games               (list) – per-game dicts with keys
+              game_name, last_played_ts
+          - daily_game_minutes  (dict) – date → minutes played
+          - daily_voice_minutes (dict) – date → minutes in voice
+        """
+        now = datetime.now()
+        end_ts = int(now.timestamp())
+        start_7d_ts = int((now - timedelta(days=7)).timestamp())
+
+        # ---- 7‑day queries for totals ----
+        df_steam = self._query_steam_game_activity(start_7d_ts, end_ts)
+        df_discord_game = self._query_discord_game_activity(start_7d_ts, end_ts)
+        df_game_merged = self._compute_game_activity(df_steam, df_discord_game)
+        df_game_intervals = self._compute_game_activity_intervals(df_game_merged)
+
+        df_voice_raw = self._query_discord_voice_activity(start_7d_ts, end_ts)
+        df_voice_intervals = self._compute_voice_activity_intervals(df_voice_raw)
+
+        # ---- collect known user names from JSON config ----
+        known_names: set[str] = set()
+        if isinstance(self.json_data, dict):
+            for u in get_user_data(self.json_data):
+                if name := u.get("name"):
+                    known_names.add(name)
+
+        # ---- also include any user_names appearing in the data ----
+        for df in (df_game_intervals, df_voice_intervals):
+            if not df.empty and "user_name" in df.columns:
+                known_names.update(str(v) for v in df["user_name"].unique() if pd.notna(v))
+
+        known_names.discard("")
+        known_names.discard("?")
+        known_names.discard("nan")
+        known_names.discard("None")
+
+        # ---- build result skeleton ----
+        result: Dict[str, dict] = {}
+        for name in sorted(known_names, key=str.casefold):
+            result[name] = {"voice_hours": 0.0, "game_hours": 0.0, "games": [],
+                            "daily_game_minutes": {}, "daily_voice_minutes": {}}
+
+        # ---- aggregate 7‑day game hours ----
+        if not df_game_intervals.empty:
+            game_totals = (
+                df_game_intervals.groupby("user_name")["duration_hours"]
+                .sum()
+                .to_dict()
+            )
+            for uname, hours in game_totals.items():
+                user_name = str(uname)
+                if user_name in result:
+                    result[user_name]["game_hours"] = round(float(hours), 2)
+
+        # ---- aggregate 7‑day voice hours ----
+        if not df_voice_intervals.empty:
+            voice_totals = (
+                df_voice_intervals.groupby("user_name")["duration_hours"]
+                .sum()
+                .to_dict()
+            )
+            for uname, hours in voice_totals.items():
+                user_name = str(uname)
+                if user_name in result:
+                    result[user_name]["voice_hours"] = round(float(hours), 2)
+
+        # ---- daily aggregates YTD (for calendar heatmaps) ----
+        year_start_ts = int(datetime(now.year, 1, 1).timestamp())
+
+        df_steam_ytd = self._query_steam_game_activity(year_start_ts, end_ts)
+        df_discord_game_ytd = self._query_discord_game_activity(year_start_ts, end_ts)
+        df_game_ytd = self._compute_game_activity(df_steam_ytd, df_discord_game_ytd)
+        df_game_intervals_ytd = self._compute_game_activity_intervals(df_game_ytd)
+
+        df_voice_ytd = self._query_discord_voice_activity(year_start_ts, end_ts)
+        df_voice_intervals_ytd = self._compute_voice_activity_intervals(df_voice_ytd)
+
+        if not df_game_intervals_ytd.empty:
+            df_game_intervals_ytd["date"] = pd.to_datetime(
+                df_game_intervals_ytd["start_ts"], unit="s"
+            ).dt.strftime("%Y-%m-%d")
+            daily_game = df_game_intervals_ytd.groupby(
+                ["user_name", "date"]
+            )["duration_minutes"].sum()
+            for key, mins in daily_game.items():
+                uname, date_str = cast(tuple[object, object], key)
+                user_name = str(uname)
+                date_key = str(date_str)
+                if user_name in result:
+                    result[user_name]["daily_game_minutes"][date_key] = round(float(mins), 1)
+
+        if not df_voice_intervals_ytd.empty:
+            df_voice_intervals_ytd["date"] = pd.to_datetime(
+                df_voice_intervals_ytd["start_ts"], unit="s"
+            ).dt.strftime("%Y-%m-%d")
+            daily_voice = df_voice_intervals_ytd.groupby(
+                ["user_name", "date"]
+            )["duration_minutes"].sum()
+            for key, mins in daily_voice.items():
+                uname, date_str = cast(tuple[object, object], key)
+                user_name = str(uname)
+                date_key = str(date_str)
+                if user_name in result:
+                    result[user_name]["daily_voice_minutes"][date_key] = round(float(mins), 1)
+
+        # ---- per‑game list: no time limit, top ``game_limit`` per user ----
+        df_steam_all = self._query_steam_game_activity(0, end_ts)
+        df_discord_all = self._query_discord_game_activity(0, end_ts)
+        df_all_merged = self._compute_game_activity(df_steam_all, df_discord_all)
+
+        if not df_all_merged.empty and "user_name" in df_all_merged.columns:
+            last_play = (
+                df_all_merged.groupby(["user_name", "game_name"])["timestamp"]
+                .max()
+                .reset_index()
+            )
+            last_play = last_play.sort_values("timestamp", ascending=False)
+            for uname in result:
+                user_games = last_play[last_play["user_name"] == uname].head(game_limit)
+                if user_games.empty:
+                    continue
+                result[uname]["games"] = [
+                    {"game_name": str(r["game_name"]), "last_played_ts": int(r["timestamp"])}
+                    for _, r in user_games.iterrows()
+                ]
+
         return result

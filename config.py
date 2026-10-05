@@ -14,7 +14,7 @@ LOGGING_LEVEL_DISCORD : str     = os.getenv("LOGGING_LEVEL_DISCORD", "WARNING").
 WEB_SERVER_PORT : int           = int(os.getenv("WEB_SERVER_PORT", 8080))  # Port für den Webserver
 JSON_DATA_PATH : str         = os.getenv("JSON_DATA_PATH", "data.json")  # Pfad zur JSON-Datei für die Datenspeicherung
 DEBUG_MODE : bool             = os.getenv("DEBUG_MODE", "False").lower() == "true"  # Aktiviert/Deaktiviert den Debug-Modus
-PORT : int                      = int(os.getenv("PORT", 5000))  # Port für den Webserver
+PORT : int                      = int(os.getenv("PORT", 5675))  # Port für den Webserver
 HOST : str                     = os.getenv("HOST", "0.0.0.0")  # Host für den Webserver
 BASE_URL : str                 = os.getenv("BASE_URL", "https://example.com/")  # Basis-URL für den Webserver
 WEB_CACHE_TTL_MINUTES : int     = int(os.getenv("WEB_CACHE_TTL_MINUTES", 5))  # Cache/Auto-Refresh Intervall der Web-Ansicht in Minuten

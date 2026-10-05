@@ -47,8 +47,6 @@ def setup_logging():
         handlers=[
             logging.StreamHandler()
         ],
-        encoding='utf-8',
-        errors='replace',
     )
     logging.raiseExceptions = False
     logging.info("Logging is set up.")
