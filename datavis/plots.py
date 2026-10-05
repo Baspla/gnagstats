@@ -172,21 +172,25 @@ def build_calendar_heatmap(
             if start <= current <= actual_end:
                 val = daily_minutes.get(date_str, 0)
                 if val > 0:
-                    z[d][w] = val
-                    z_text[d][w] = f"Date: {date_str}<br>Value: {val:.1f} min"
+                    hours = float(val) / 60.0
+                    z[d][w] = hours
+                    hours_text = f"{hours:.1f}".replace(".", ",")
+                    formatted_date = current.strftime("%d.%m.%Y")
+                    z_text[d][w] = f"Datum: {formatted_date}<br>Dauer: {hours_text} Stunden"
                 else:
                     # None macht die Zelle komplett transparent
                     z[d][w] = None  
-                    z_text[d][w] = f"Date: {date_str}<br>No activity"
+                    formatted_date = current.strftime("%d.%m.%Y")
+                    z_text[d][w] = f"Datum: {formatted_date}<br>Keine Aktivität"
             else:
                 z[d][w] = None 
             current += timedelta(days=1)
 
-    day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    day_labels = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
     
     # Use abbreviated month names to prevent overlapping
-    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
-                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    month_names = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun",
+                   "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
 
     # Calculate X-axis ticks for the first week of each month
     tickvals = []
@@ -212,7 +216,7 @@ def build_calendar_heatmap(
             hoverongaps=True, # Wichtig: Erlaubt Tooltips auf transparenten (None) Zellen
             hovertemplate="%{text}<extra></extra>",
             showscale=True,
-            colorbar=dict(title="Minutes"),
+            colorbar=dict(title="Stunden"),
         )
     )
 

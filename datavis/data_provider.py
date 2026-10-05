@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 import logging
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import Dict, Tuple, cast
 import pandas as pd
 import uuid
@@ -279,6 +280,66 @@ class DataProvider:
         sess_df = sess_df[sess_df["duration_seconds"] > 0]
         return sess_df.reset_index(drop=True)
     
+    def _aggregate_game_calendar_minutes(
+        self,
+        game_intervals: pd.DataFrame,
+        start_ts: int,
+        end_ts: int,
+    ) -> Dict[Tuple[str, str], float]:
+        """Aggregate game intervals as non-overlapping local calendar-day minutes.
+
+        The existing continuous session builder (``_compute_game_activity_intervals``)
+        intentionally merges snapshots across midnight to preserve long sessions for
+        timeline visualisations.  For the calendar heatmap, however, each day must
+        show only the time actually played during that local (Europe/Berlin) day.
+        This method:
+          1. Converts each interval's start/end to Europe/Berlin.
+          2. Splits any interval that crosses local midnight.
+          3. Clips each piece to the caller's time range.
+          4. Merges overlapping pieces per (user, date).
+          5. Returns total minutes per (user, date).
+        """
+        if game_intervals.empty:
+            return {}
+
+        local_tz = ZoneInfo("Europe/Berlin")
+        pieces: Dict[tuple[str, str], list[tuple[float, float]]] = {}
+
+        for row in game_intervals.itertuples(index=False):
+            user_name = str(getattr(row, "user_name", ""))
+            try:
+                interval_start = max(float(row.start_ts), float(start_ts))
+                interval_end = min(float(row.end_ts), float(end_ts))
+            except (TypeError, ValueError):
+                continue
+            if not user_name or interval_end <= interval_start:
+                continue
+
+            current_ts = interval_start
+            while current_ts < interval_end:
+                current_dt = datetime.fromtimestamp(current_ts, tz=local_tz)
+                next_midnight = datetime.combine(
+                    current_dt.date() + timedelta(days=1),
+                    datetime.min.time(),
+                    tzinfo=local_tz,
+                )
+                piece_end = min(interval_end, next_midnight.timestamp())
+                key = (user_name, current_dt.date().isoformat())
+                pieces.setdefault(key, []).append((current_ts, piece_end))
+                current_ts = piece_end
+
+        totals: Dict[tuple[str, str], float] = {}
+        for key, intervals in pieces.items():
+            intervals.sort()
+            merged: list[list[float]] = []
+            for ia, ib in intervals:
+                if merged and ia <= merged[-1][1]:
+                    merged[-1][1] = max(merged[-1][1], ib)
+                else:
+                    merged.append([ia, ib])
+            totals[key] = sum(b - a for a, b in merged) / 60.0
+        return totals
+    
     def _query_first_timestamp(self) -> int | None:
         return self.db.web_query_get_first_timestamp()
 
@@ -453,19 +514,13 @@ class DataProvider:
         df_voice_ytd = self._query_discord_voice_activity(year_start_ts, end_ts)
         df_voice_intervals_ytd = self._compute_voice_activity_intervals(df_voice_ytd)
 
-        if not df_game_intervals_ytd.empty:
-            df_game_intervals_ytd["date"] = pd.to_datetime(
-                df_game_intervals_ytd["start_ts"], unit="s"
-            ).dt.strftime("%Y-%m-%d")
-            daily_game = df_game_intervals_ytd.groupby(
-                ["user_name", "date"]
-            )["duration_minutes"].sum()
-            for key, mins in daily_game.items():
-                uname, date_str = cast(tuple[object, object], key)
-                user_name = str(uname)
-                date_key = str(date_str)
-                if user_name in result:
-                    result[user_name]["daily_game_minutes"][date_key] = round(float(mins), 1)
+        daily_game = self._aggregate_game_calendar_minutes(
+            df_game_intervals_ytd, year_start_ts, end_ts
+        )
+        for key, mins in daily_game.items():
+            user_name, date_str = key
+            if user_name in result:
+                result[user_name]["daily_game_minutes"][date_str] = round(float(mins), 1)
 
         if not df_voice_intervals_ytd.empty:
             df_voice_intervals_ytd["date"] = pd.to_datetime(
