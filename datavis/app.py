@@ -5,6 +5,7 @@ import streamlit as st
 import sys
 import os
 import datetime
+import time
 from streamlit_autorefresh import st_autorefresh
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -35,15 +36,35 @@ def get_alltime_stats():
     provider = DataProvider(Database())
     return provider.get_user_stats_alltime()
 
+
+def load_dashboard_data_with_timing():
+    """Load both cached datasets and report whether this is the first page load."""
+    start = time.perf_counter()
+    figures, user_stats = get_dashboard_data()
+    alltime_stats = get_alltime_stats()
+    elapsed = time.perf_counter() - start
+
+    first_load = not st.session_state.get("dashboard_has_loaded", False)
+    st.session_state.dashboard_has_loaded = True
+    load_type = "Initial load" if first_load else "Cache hit"
+
+    return figures, user_stats, alltime_stats, elapsed, load_type
+
 def main():
     try:
         st_autorefresh(interval=5 * 60 * 1000, key="data_refresher")
         
-        figures, user_stats = get_dashboard_data()
-        alltime_stats = get_alltime_stats()
+        (
+            figures,
+            user_stats,
+            alltime_stats,
+            load_seconds,
+            load_type,
+        ) = load_dashboard_data_with_timing()
         last_updated = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         st.title(f"Gnag Stats Dashboard")
+        st.caption(f"{load_type} — data loaded in {load_seconds:.2f} seconds")
         
         voice_fig = figures.get('voice')
         game_fig = figures.get('game')
