@@ -38,17 +38,13 @@ def get_alltime_stats():
 
 
 def load_dashboard_data_with_timing():
-    """Load both cached datasets and report whether this is the first page load."""
+    """Load both datasets and measure how long the loading call takes."""
     start = time.perf_counter()
     figures, user_stats = get_dashboard_data()
     alltime_stats = get_alltime_stats()
     elapsed = time.perf_counter() - start
 
-    first_load = not st.session_state.get("dashboard_has_loaded", False)
-    st.session_state.dashboard_has_loaded = True
-    load_type = "Initial load" if first_load else "Cache hit"
-
-    return figures, user_stats, alltime_stats, elapsed, load_type
+    return figures, user_stats, alltime_stats, elapsed
 
 def main():
     try:
@@ -59,12 +55,11 @@ def main():
             user_stats,
             alltime_stats,
             load_seconds,
-            load_type,
         ) = load_dashboard_data_with_timing()
         last_updated = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         st.title(f"Gnag Stats Dashboard")
-        st.caption(f"{load_type} — data loaded in {load_seconds:.2f} seconds")
+        st.caption(f"Innerhalb von {load_seconds:.2f} Sekunden geladen. Letzte Aktualisierung: {last_updated}")
         
         voice_fig = figures.get('voice')
         game_fig = figures.get('game')
