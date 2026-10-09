@@ -15,22 +15,33 @@ from datavis.plots import build_figures, build_calendar_heatmap
 
 st.set_page_config(layout="wide", page_title="Gnag Stats Dashboard")
 
-@st.cache_resource(ttl=300)
-def get_global_data():
+@st.cache_data(ttl=300)
+def get_dashboard_data():
     db = Database()
     provider = DataProvider(db)
-    
+
     figures = build_figures(provider)
     user_stats = provider.get_user_stats_7d()
-    alltime_stats = provider.get_user_stats_alltime()
-    
-    return figures, user_stats, alltime_stats, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return figures, user_stats
+
+
+@st.cache_data(ttl=3600)
+def get_alltime_stats():
+    """Cache the expensive historical aggregation independently.
+
+    All-time values change much less often than the live dashboard data, so
+    they should not force a full historical scan every five-minute refresh.
+    """
+    provider = DataProvider(Database())
+    return provider.get_user_stats_alltime()
 
 def main():
     try:
         st_autorefresh(interval=5 * 60 * 1000, key="data_refresher")
         
-        figures, user_stats, alltime_stats, last_updated = get_global_data()
+        figures, user_stats = get_dashboard_data()
+        alltime_stats = get_alltime_stats()
+        last_updated = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         st.title(f"Gnag Stats Dashboard")
         

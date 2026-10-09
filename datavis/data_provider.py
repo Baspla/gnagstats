@@ -164,32 +164,28 @@ class DataProvider:
         # Session-Konstruktion ähnlich build_voice_24h_timeline
         sessions = []
         for user, g in df.groupby("user_name"):
-            g = g.sort_values("timestamp").reset_index(drop=True)
+            g = g.sort_values("timestamp")
+            intervals = pd.to_numeric(g["collection_interval"], errors="coerce").dropna()
+            default_interval = float(intervals.median() if not intervals.empty else 300.0)
             current = None
-            prev_row = None
-            default_interval = float(g["collection_interval"].dropna().median() if not g["collection_interval"].dropna().empty else 300.0)
-            for _, row in g.iterrows():
-                ts = int(row["timestamp"])
-                chan = row.get("channel_name", "?") or "?"
-                interv = row.get("collection_interval")
+            prev_ts = None
+            prev_interv = default_interval
+            for ts_value, chan_value, interval_value in g[
+                ["timestamp", "channel_name", "collection_interval"]
+            ].itertuples(index=False, name=None):
+                ts = int(ts_value)
+                chan = chan_value or "?"
                 try:
-                    interv = float(interv or default_interval)
+                    interv = float(interval_value or default_interval)
                     if not math.isfinite(interv) or interv <= 0:
                         raise ValueError
-                except Exception:
+                except (TypeError, ValueError):
                     interv = default_interval
                 snapshot_end = ts + interv
                 if current is None:
                     current = {"user_name": user, "channel_name": chan, "start_ts": ts, "end_ts": snapshot_end}
                 else:
-                    gap = ts - prev_row["timestamp"] if prev_row is not None else 0
-                    prev_interv = prev_row.get("collection_interval") if prev_row is not None else default_interval
-                    try:
-                        prev_interv = float(prev_interv or default_interval)
-                        if not math.isfinite(prev_interv) or prev_interv <= 0:
-                            raise ValueError
-                    except Exception:
-                        prev_interv = default_interval
+                    gap = ts - prev_ts
                     max_gap = 2 * max(prev_interv, interv)
                     if chan == current["channel_name"] and gap <= max_gap:
                         if snapshot_end > current["end_ts"]:
@@ -198,7 +194,8 @@ class DataProvider:
                         if current["end_ts"] > current["start_ts"]:
                             sessions.append(current)
                         current = {"user_name": user, "channel_name": chan, "start_ts": ts, "end_ts": snapshot_end}
-                prev_row = row
+                prev_ts = ts
+                prev_interv = interv
             if current is not None and current["end_ts"] > current["start_ts"]:
                 sessions.append(current)
         if not sessions:
@@ -233,31 +230,27 @@ class DataProvider:
             df["source"] = "unknown"
         sessions = []
         for (user, game, source), g in df.groupby(["user_name", "game_name", "source"]):
-            g = g.sort_values("timestamp").reset_index(drop=True)
+            g = g.sort_values("timestamp")
+            intervals = pd.to_numeric(g["collection_interval"], errors="coerce").dropna()
+            default_interval = float(intervals.median() if not intervals.empty else 300.0)
             current = None
-            prev_row = None
-            default_interval = float(g["collection_interval"].dropna().median() if not g["collection_interval"].dropna().empty else 300.0)
-            for _, row in g.iterrows():
-                ts = int(row["timestamp"])
-                interv = row.get("collection_interval")
+            prev_ts = None
+            prev_interv = default_interval
+            for ts_value, interval_value in g[
+                ["timestamp", "collection_interval"]
+            ].itertuples(index=False, name=None):
+                ts = int(ts_value)
                 try:
-                    interv = float(interv or default_interval)
+                    interv = float(interval_value or default_interval)
                     if not math.isfinite(interv) or interv <= 0:
                         raise ValueError
-                except Exception:
+                except (TypeError, ValueError):
                     interv = default_interval
                 snapshot_end = ts + interv
                 if current is None:
                     current = {"user_name": user, "game_name": game, "source": source, "start_ts": ts, "end_ts": snapshot_end}
                 else:
-                    gap = ts - prev_row["timestamp"] if prev_row is not None else 0
-                    prev_interv = prev_row.get("collection_interval") if prev_row is not None else default_interval
-                    try:
-                        prev_interv = float(prev_interv or default_interval)
-                        if not math.isfinite(prev_interv) or prev_interv <= 0:
-                            raise ValueError
-                    except Exception:
-                        prev_interv = default_interval
+                    gap = ts - prev_ts
                     max_gap = 2 * max(prev_interv, interv)
                     if gap <= max_gap:
                         if snapshot_end > current["end_ts"]:
@@ -266,7 +259,8 @@ class DataProvider:
                         if current["end_ts"] > current["start_ts"]:
                             sessions.append(current)
                         current = {"user_name": user, "game_name": game, "source": source, "start_ts": ts, "end_ts": snapshot_end}
-                prev_row = row
+                prev_ts = ts
+                prev_interv = interv
             if current is not None and current["end_ts"] > current["start_ts"]:
                 sessions.append(current)
         if not sessions:
@@ -696,20 +690,30 @@ class DataProvider:
 
         # --- aggregate flag-based times from raw voice data ---
         if not df_voice_raw.empty and "user_name" in df_voice_raw.columns:
-            ci = df_voice_raw["collection_interval"].fillna(300)
-            for flag_col, result_key in [
-                ("self_mute", "mute_hours"),
-                ("self_deaf", "deaf_hours"),
-                ("self_stream", "stream_hours"),
-                ("self_video", "video_hours"),
-            ]:
-                flag_df = df_voice_raw[df_voice_raw[flag_col] == 1].copy()
-                if not flag_df.empty:
-                    flag_df["_ci"] = ci[flag_df.index]
-                    total_secs = flag_df.groupby("user_name")["_ci"].sum().to_dict()
-                    for uname, secs in total_secs.items():
-                        user_name = str(uname)
-                        if user_name in result:
-                            result[user_name][result_key] = round(float(secs) / 3600.0, 2)
+            # Aggregate all four flags in one grouped operation instead of
+            # making four filtered copies of the complete voice DataFrame.
+            flag_columns = ["self_mute", "self_deaf", "self_stream", "self_video"]
+            available_flags = [column for column in flag_columns if column in df_voice_raw.columns]
+            if available_flags:
+                flag_values = df_voice_raw[available_flags].fillna(0).astype(float)
+                flag_values = flag_values.mul(
+                    df_voice_raw["collection_interval"].fillna(300).astype(float),
+                    axis=0,
+                )
+                flag_values["user_name"] = df_voice_raw["user_name"].values
+                flag_totals = flag_values.groupby("user_name")[available_flags].sum()
+                result_keys = {
+                    "self_mute": "mute_hours",
+                    "self_deaf": "deaf_hours",
+                    "self_stream": "stream_hours",
+                    "self_video": "video_hours",
+                }
+                for uname, totals in flag_totals.iterrows():
+                    user_name = str(uname)
+                    if user_name in result:
+                        for flag_column in available_flags:
+                            result[user_name][result_keys[flag_column]] = round(
+                                float(totals[flag_column]) / 3600.0, 2
+                            )
 
         return result

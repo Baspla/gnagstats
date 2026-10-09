@@ -57,6 +57,25 @@ class Database:
                     ,collection_interval INTEGER DEFAULT NULL
             )
         ''')
+        # All web queries filter and sort by timestamp.  These indexes are
+        # created here so existing databases get the optimization as well as
+        # newly created ones.  IF NOT EXISTS keeps startup idempotent.
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_discord_voice_activity_timestamp
+            ON discord_voice_activity(timestamp)
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_discord_voice_channels_timestamp
+            ON discord_voice_channels(timestamp)
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_discord_game_activity_timestamp
+            ON discord_game_activity(timestamp)
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_steam_game_activity_timestamp
+            ON steam_game_activity(timestamp)
+        ''')
         connection.commit()
         connection.close()
         logging.info("Database is set up.")
